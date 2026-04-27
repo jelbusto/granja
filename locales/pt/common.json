@@ -1,0 +1,23 @@
+{
+  "app_name": "GranjaApp",
+  "save": "Salvar",
+  "cancel": "Cancelar",
+  "delete": "Excluir",
+  "edit": "Editar",
+  "new": "Novo",
+  "search": "Buscar",
+  "loading": "Carregando...",
+  "error": "Erro",
+  "success": "Salvo com sucesso",
+  "confirm_delete": "Tem certeza que deseja excluir este registro?",
+  "yes": "Sim",
+  "no": "Não",
+  "active": "Ativo",
+  "inactive": "Inativo",
+  "page": "Página",
+  "of": "de",
+  "previous": "Anterior",
+  "next": "Próximo",
+  "actions": "Ações",
+  "required_field": "Campo obrigatório"
+}

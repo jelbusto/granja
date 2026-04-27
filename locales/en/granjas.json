@@ -1,0 +1,42 @@
+{
+  "title": "Farms",
+  "new_granja": "New farm",
+  "edit_granja": "Edit farm",
+  "no_granjas": "No farms registered",
+  "datos_generales": "General data",
+  "id": "Code",
+  "nombre": "Name",
+  "direccion": "Address",
+  "poblacion": "City",
+  "provincia": "Province / State",
+  "pais": "Country",
+  "pais_placeholder": "Select country",
+  "provincia_placeholder": "Select province / region",
+  "paises": {
+    "ES": "Spain",
+    "PT": "Portugal"
+  },
+  "datos_rebano": "Herd data",
+  "n_patios_lactacion": "No. of lactation yards",
+  "preparto": "Pre-calving",
+  "postparto": "Post-calving",
+  "secas_descripcion": "Dry cows description",
+  "pct_eliminacion": "Projected culling %",
+  "dias_secado": "Dry days",
+  "sala_ordeno": "Milking parlour",
+  "marca": "Parlour brand",
+  "tipo": "Type",
+  "tipo_otro_label": "Specify type",
+  "n_puntos": "No. of stalls",
+  "vacas_hora": "Cows / hour",
+  "n_ordenadores": "No. of milkers",
+  "horas_ordeno": "Milking hours",
+  "tipos": {
+    "espina_de_pez": "Herringbone",
+    "paralela": "Parallel",
+    "rotativa": "Rotary",
+    "tandem": "Tandem",
+    "robot": "Robot",
+    "otro": "Other"
+  }
+}

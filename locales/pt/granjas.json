@@ -1,0 +1,42 @@
+{
+  "title": "Granjas",
+  "new_granja": "Nova granja",
+  "edit_granja": "Editar granja",
+  "no_granjas": "Nenhuma granja registrada",
+  "datos_generales": "Dados gerais",
+  "id": "Código",
+  "nombre": "Nome",
+  "direccion": "Endereço",
+  "poblacion": "Cidade",
+  "provincia": "Estado / Província",
+  "pais": "País",
+  "pais_placeholder": "Selecionar país",
+  "provincia_placeholder": "Selecionar distrito / região",
+  "paises": {
+    "ES": "Espanha",
+    "PT": "Portugal"
+  },
+  "datos_rebano": "Dados do rebanho",
+  "n_patios_lactacion": "Nº de pátios de lactação",
+  "preparto": "Pré-parto",
+  "postparto": "Pós-parto",
+  "secas_descripcion": "Descrição das vacas secas",
+  "pct_eliminacion": "% de eliminação prevista",
+  "dias_secado": "Dias de secagem",
+  "sala_ordeno": "Sala de ordenha",
+  "marca": "Marca da sala",
+  "tipo": "Tipo",
+  "tipo_outro_label": "Especificar tipo",
+  "n_puntos": "Nº de pontos",
+  "vacas_hora": "Vacas / hora",
+  "n_ordenadores": "Nº de ordenhadores",
+  "horas_ordeno": "Horas de ordenha",
+  "tipos": {
+    "espina_de_pez": "Espinha de peixe",
+    "paralela": "Paralela",
+    "rotativa": "Rotativa",
+    "tandem": "Tandem",
+    "robot": "Robô",
+    "otro": "Outro"
+  }
+}
