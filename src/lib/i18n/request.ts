@@ -1,4 +1,5 @@
 import { getRequestConfig } from "next-intl/server";
+import type { AbstractIntlMessages } from "next-intl";
 import { locales, defaultLocale, namespaces } from "./config";
 
 export default getRequestConfig(async ({ requestLocale }) => {
@@ -8,8 +9,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
     locale = defaultLocale;
   }
 
-  // Carga todos los namespaces y los agrupa bajo su clave
-  const messages: Record<string, unknown> = {};
+  const messages: Record<string, AbstractIntlMessages> = {};
   for (const ns of namespaces) {
     messages[ns] = (
       await import(`../../../locales/${locale}/${ns}.json`)

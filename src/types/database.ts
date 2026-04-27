@@ -34,6 +34,7 @@ export type Database = {
           activo?: boolean;
           created_at?: string;
         };
+        Relationships: [];
       };
       users: {
         Row: {
@@ -66,6 +67,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       granjas: {
         Row: {
@@ -122,6 +124,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       salas_ordeno: {
         Row: {
@@ -163,6 +166,15 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [
+          {
+            foreignKeyName: "salas_ordeno_granja_id_fkey";
+            columns: ["granja_id"];
+            isOneToOne: true;
+            referencedRelation: "granjas";
+            referencedColumns: ["id"];
+          }
+        ];
       };
       user_granjas: {
         Row: {
@@ -189,8 +201,26 @@ export type Database = {
           activo?: boolean;
           created_at?: string;
         };
+        Relationships: [
+          {
+            foreignKeyName: "user_granjas_granja_id_fkey";
+            columns: ["granja_id"];
+            isOneToOne: false;
+            referencedRelation: "granjas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "user_granjas_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
       };
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
     Enums: {
       tipo_sala_enum: TipoSalaEnum;
       rol_granja_enum: RolGranjaEnum;

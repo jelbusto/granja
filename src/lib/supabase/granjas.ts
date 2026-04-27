@@ -81,17 +81,21 @@ export async function getGranja(id: string): Promise<{
     .single();
 
   // La relación devuelve array — normalizamos a objeto único
-  const normalized = data
+  type RawRow = Tables<"granjas"> & {
+    salas_ordeno: Tables<"salas_ordeno">[] | Tables<"salas_ordeno"> | null;
+  };
+  const row = data as unknown as RawRow | null;
+  const normalized: GranjaWithSala | null = row
     ? {
-        ...data,
-        salas_ordeno: Array.isArray(data.salas_ordeno)
-          ? (data.salas_ordeno[0] ?? null)
-          : (data.salas_ordeno ?? null),
+        ...row,
+        salas_ordeno: Array.isArray(row.salas_ordeno)
+          ? (row.salas_ordeno[0] ?? null)
+          : (row.salas_ordeno ?? null),
       }
     : null;
 
   return {
-    data: normalized as GranjaWithSala | null,
+    data: normalized,
     error: error ? { message: error.message } : null,
   };
 }
