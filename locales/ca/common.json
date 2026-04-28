@@ -1,0 +1,23 @@
+{
+  "app_name": "GranjaApp",
+  "save": "Desar",
+  "cancel": "Cancel·lar",
+  "delete": "Eliminar",
+  "edit": "Editar",
+  "new": "Nou",
+  "search": "Cercar",
+  "loading": "Carregant...",
+  "error": "Error",
+  "success": "Desat correctament",
+  "confirm_delete": "Esteu segur que voleu eliminar aquest registre?",
+  "yes": "Sí",
+  "no": "No",
+  "active": "Actiu",
+  "inactive": "Inactiu",
+  "page": "Pàgina",
+  "of": "de",
+  "previous": "Anterior",
+  "next": "Següent",
+  "actions": "Accions",
+  "required_field": "Camp obligatori"
+}

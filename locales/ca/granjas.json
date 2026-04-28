@@ -1,0 +1,42 @@
+{
+  "title": "Granges",
+  "new_granja": "Nova granja",
+  "edit_granja": "Editar granja",
+  "no_granjas": "No hi ha granges registrades",
+  "datos_generales": "Dades generals",
+  "id": "Codi",
+  "nombre": "Nom",
+  "direccion": "Adreça",
+  "poblacion": "Població",
+  "provincia": "Província",
+  "pais": "País",
+  "pais_placeholder": "Seleccionar país",
+  "provincia_placeholder": "Seleccionar província",
+  "paises": {
+    "ES": "Espanya",
+    "PT": "Portugal"
+  },
+  "datos_rebano": "Dades del ramat",
+  "n_patios_lactacion": "Nº de patis de lactació",
+  "preparto": "Preparter",
+  "postparto": "Postparter",
+  "secas_descripcion": "Descripció vaques seques",
+  "pct_eliminacion": "% eliminació previst",
+  "dias_secado": "Dies d'eixut",
+  "sala_ordeno": "Sala de munyida",
+  "marca": "Marca de sala",
+  "tipo": "Tipus",
+  "tipo_otro_label": "Especificar tipus",
+  "n_puntos": "Nº de punts",
+  "vacas_hora": "Vaques/hora",
+  "n_ordenadores": "Nº de munyidors",
+  "horas_ordeno": "Hores de munyida",
+  "tipos": {
+    "espina_de_pez": "Espina de peix",
+    "paralela": "Paral·lela",
+    "rotativa": "Rotativa",
+    "tandem": "Tàndem",
+    "robot": "Robot",
+    "otro": "Altre"
+  }
+}

@@ -2,16 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+[data-theme="azul"] {
   --background: #ffffff;
   --foreground: #171717;
+  --accent: #2563eb;
+  --accent-dark: #1d4ed8;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+[data-theme="verde"] {
+  --accent: #16a34a;
+  --accent-dark: #15803d;
+}
+
+[data-theme="violeta"] {
+  --accent: #7c3aed;
+  --accent-dark: #6d28d9;
 }
 
 body {

@@ -4,6 +4,8 @@ import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing } from "@/lib/i18n/routing";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import "../globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -29,9 +31,18 @@ export default async function LocaleLayout({
   return (
     <html lang={locale}>
       <body className={inter.className}>
-        <NextIntlClientProvider messages={messages}>
-          {children}
-        </NextIntlClientProvider>
+        {/* Applies saved theme before first paint to avoid flash */}
+        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('dp-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}` }} />
+        <ThemeProvider>
+          <NextIntlClientProvider messages={messages}>
+            <div className="flex min-h-screen">
+              <Sidebar />
+              <div className="flex-1 flex flex-col min-w-0 pt-14 lg:pt-0">
+                {children}
+              </div>
+            </div>
+          </NextIntlClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
