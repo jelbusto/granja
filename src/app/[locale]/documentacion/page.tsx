@@ -11,12 +11,12 @@
     fecha_subida  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     subido_por    TEXT        NOT NULL DEFAULT 'Javier Heras',
     tamano_bytes  BIGINT,
-    url_archivo   TEXT,
+    storage_path  TEXT,
     id_granja     UUID        REFERENCES granjas(id),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
-  Storage bucket "documentos" must exist and be public.
+  Storage bucket "documentos" (puede ser privado, se usan signed URLs).
 */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -26,7 +26,7 @@ import { DocumentIcon, TrashIcon } from "@/components/ui/Icons";
 type TipoArchivo = "pdf" | "word" | "powerpoint" | "imagen";
 type Categoria = "informe_tecnico" | "otros";
 
-type Documento = {
+type DocumentoRaw = {
   id: string;
   nombre: string;
   tipo_archivo: TipoArchivo;
@@ -34,12 +34,15 @@ type Documento = {
   fecha_subida: string;
   subido_por: string;
   tamano_bytes: number | null;
-  url_archivo: string | null;
+  storage_path: string | null;
   id_granja: string | null;
   granjas?: { nombre: string } | null;
 };
 
+type Documento = DocumentoRaw & { signedUrl: string | null };
+
 const USUARIO_ACTUAL = "Javier Heras";
+const SIGNED_URL_TTL = 3600; // 1 hora
 
 function detectTipo(file: File): TipoArchivo {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -49,6 +52,12 @@ function detectTipo(file: File): TipoArchivo {
   if (file.type.startsWith("image/") || ["jpg", "jpeg", "png", "heic", "heif", "webp"].includes(ext))
     return "imagen";
   return "pdf";
+}
+
+// Handles both old records (full URL) and new ones (path)
+function toStoragePath(urlOrPath: string): string {
+  const match = urlOrPath.match(/\/object\/(?:public|sign)\/documentos\/([^?]+)/);
+  return match ? decodeURIComponent(match[1]) : urlOrPath;
 }
 
 const TIPO_LABEL: Record<TipoArchivo, string> = { pdf: "PDF", word: "Word", powerpoint: "PPT", imagen: "Foto" };
@@ -148,7 +157,40 @@ export default function DocumentacionPage() {
       .order("fecha_subida", { ascending: false });
     if (granjaFiltro !== "todas") q = q.eq("id_granja", granjaFiltro);
     const { data, error } = await q;
-    if (!error) setDocumentos((data ?? []) as Documento[]);
+
+    if (error || !data) {
+      setLoading(false);
+      return;
+    }
+
+    const rows = data as DocumentoRaw[];
+
+    // Generate signed URLs in batch for all docs that have a storage path
+    const paths = rows
+      .map((d) => d.storage_path)
+      .filter((p): p is string => !!p)
+      .map(toStoragePath);
+
+    let signedMap: Record<string, string> = {};
+    if (paths.length > 0) {
+      const { data: signed } = await supabase.storage
+        .from("documentos")
+        .createSignedUrls(paths, SIGNED_URL_TTL);
+      if (signed) {
+        signedMap = Object.fromEntries(
+          signed.filter((s) => s.signedUrl).map((s) => [s.path, s.signedUrl])
+        );
+      }
+    }
+
+    setDocumentos(
+      rows.map((d) => ({
+        ...d,
+        signedUrl: d.storage_path
+          ? (signedMap[toStoragePath(d.storage_path)] ?? null)
+          : null,
+      }))
+    );
     setLoading(false);
   }, [supabase, granjaFiltro]);
 
@@ -168,26 +210,26 @@ export default function DocumentacionPage() {
     const now = new Date();
     const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}_${String(now.getDate()).padStart(2, "0")}`;
     const nombre = tipo === "imagen" ? `foto_${dateStr}` : file.name;
-    const fileName = `${granjaSeleccionada}/${Date.now()}_${file.name}`;
+    const storagePath = `${granjaSeleccionada}/${Date.now()}_${file.name}`;
 
-    let url_archivo: string | null = null;
-    const { data: storageData, error: storageError } = await supabase.storage
+    const { error: storageError } = await supabase.storage
       .from("documentos")
-      .upload(fileName, file, { contentType: file.type });
+      .upload(storagePath, file, { contentType: file.type });
 
-    if (!storageError && storageData) {
-      const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(fileName);
-      url_archivo = publicUrl;
+    if (storageError) {
+      setUploadMsg({ ok: false, text: `Error al subir el archivo: ${storageError.message}` });
+      setUploading(false);
+      return;
     }
 
     const { error: dbError } = await supabase.from("documentos").insert({
       nombre,
       tipo_archivo: tipo,
       categoria,
-      fecha_subida: new Date().toISOString(),
+      fecha_subida: now.toISOString(),
       subido_por: USUARIO_ACTUAL,
       tamano_bytes: file.size,
-      url_archivo,
+      storage_path: storagePath,
       id_granja: granjaSeleccionada,
     } as never);
 
@@ -207,9 +249,8 @@ export default function DocumentacionPage() {
   }
 
   async function handleDelete(doc: Documento) {
-    if (doc.url_archivo) {
-      const match = doc.url_archivo.match(/\/documentos\/(.+)$/);
-      if (match) await supabase.storage.from("documentos").remove([decodeURIComponent(match[1])]);
+    if (doc.storage_path) {
+      await supabase.storage.from("documentos").remove([toStoragePath(doc.storage_path)]);
     }
     const { error } = await supabase.from("documentos").delete().eq("id", doc.id);
     if (!error) setDocumentos((prev) => prev.filter((d) => d.id !== doc.id));
@@ -233,7 +274,6 @@ export default function DocumentacionPage() {
 
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex flex-col gap-4 flex-1">
-            {/* Granja selector */}
             <div>
               <FieldLabel>Granja</FieldLabel>
               <select
@@ -247,7 +287,6 @@ export default function DocumentacionPage() {
               </select>
             </div>
 
-            {/* Category selector */}
             <div>
               <FieldLabel>Categoría</FieldLabel>
               <select
@@ -260,11 +299,8 @@ export default function DocumentacionPage() {
               </select>
             </div>
 
-            {/* Upload zones */}
             <div>
               <FieldLabel>Archivo</FieldLabel>
-
-              {/* Hidden inputs */}
               <input
                 ref={fileRef}
                 type="file"
@@ -327,7 +363,6 @@ export default function DocumentacionPage() {
             )}
           </div>
 
-          {/* Info panel */}
           <div className="lg:w-64">
             <div style={{ backgroundColor: "#f8f7f4", borderRadius: 8 }} className="p-4">
               <p style={{ fontWeight: 500, fontSize: 13 }} className="text-gray-800 mb-2">
@@ -399,14 +434,27 @@ export default function DocumentacionPage() {
               <tbody>
                 {documentos.map((doc) => (
                   <tr key={doc.id} className="border-t border-gray-50">
-                    <td className="py-3 pr-4">
-                      <div className="flex items-center gap-2.5">
-                        {doc.tipo_archivo === "imagen" && doc.url_archivo ? (
-                          <img
-                            src={doc.url_archivo}
-                            alt={doc.nombre}
-                            className="h-8 w-8 rounded object-cover flex-shrink-0"
-                          />
+                    <td className="py-2 pr-4">
+                      <div className="flex items-center gap-3">
+                        {/* Thumbnail for images */}
+                        {doc.tipo_archivo === "imagen" ? (
+                          doc.signedUrl ? (
+                            <a href={doc.signedUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                              <img
+                                src={doc.signedUrl}
+                                alt={doc.nombre}
+                                className="h-12 w-12 rounded-lg object-cover flex-shrink-0"
+                                style={{ border: "1px solid #e5e5e5" }}
+                              />
+                            </a>
+                          ) : (
+                            <div
+                              className="h-12 w-12 rounded-lg flex-shrink-0 flex items-center justify-center"
+                              style={{ backgroundColor: "#f3f4f6", border: "1px solid #e5e5e5" }}
+                            >
+                              <CameraIcon className="h-5 w-5 text-gray-300" />
+                            </div>
+                          )
                         ) : (
                           <span
                             style={{
@@ -421,9 +469,9 @@ export default function DocumentacionPage() {
                             {TIPO_LABEL[doc.tipo_archivo]}
                           </span>
                         )}
-                        {doc.url_archivo ? (
+                        {doc.signedUrl ? (
                           <a
-                            href={doc.url_archivo}
+                            href={doc.signedUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ fontSize: 13, color: "#374151" }}
@@ -443,7 +491,7 @@ export default function DocumentacionPage() {
                     <Td>{fmtDate(doc.fecha_subida)}</Td>
                     <Td>{fmtSize(doc.tamano_bytes)}</Td>
                     <Td>{doc.subido_por}</Td>
-                    <td className="py-3 pl-2">
+                    <td className="py-2 pl-2">
                       {deleteConfirm === doc.id ? (
                         <div className="flex items-center gap-2">
                           <button
