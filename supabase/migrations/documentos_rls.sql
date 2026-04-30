@@ -1,20 +1,31 @@
--- ── 1. Crear el bucket si no existe ──────────────────────────────────────────
+-- ── 1. Crear / asegurar bucket público ───────────────────────────────────────
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('documentos', 'documentos', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
--- ── 2. Tabla documentos: acceso total sin autenticación ───────────────────────
-ALTER TABLE documentos ENABLE ROW LEVEL SECURITY;
+-- ── 2. Limpiar policies anteriores en storage.objects ─────────────────────────
+DROP POLICY IF EXISTS "Acceso público a archivos"                        ON storage.objects;
+DROP POLICY IF EXISTS "Usuarios autenticados pueden subir archivos"      ON storage.objects;
+DROP POLICY IF EXISTS "Usuarios autenticados pueden leer archivos"       ON storage.objects;
+DROP POLICY IF EXISTS "Usuarios autenticados pueden eliminar archivos"   ON storage.objects;
+DROP POLICY IF EXISTS "documentos_public_access"                         ON storage.objects;
 
-DROP POLICY IF EXISTS "Acceso público a documentos" ON documentos;
-CREATE POLICY "Acceso público a documentos"
-  ON documentos FOR ALL
-  USING (true)
-  WITH CHECK (true);
-
--- ── 3. Storage: acceso total al bucket documentos ─────────────────────────────
-DROP POLICY IF EXISTS "Acceso público a archivos" ON storage.objects;
-CREATE POLICY "Acceso público a archivos"
+-- ── 3. Policy storage: TO public (aplica a todos, incluido anon) ──────────────
+CREATE POLICY "documentos_public_access"
   ON storage.objects FOR ALL
+  TO public
   USING (bucket_id = 'documentos')
   WITH CHECK (bucket_id = 'documentos');
+
+-- ── 4. Limpiar policies anteriores en tabla documentos ────────────────────────
+DROP POLICY IF EXISTS "Acceso público a documentos" ON documentos;
+DROP POLICY IF EXISTS "documentos_public"           ON documentos;
+
+-- ── 5. Policy tabla: TO public ────────────────────────────────────────────────
+ALTER TABLE documentos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "documentos_public"
+  ON documentos FOR ALL
+  TO public
+  USING (true)
+  WITH CHECK (true);
