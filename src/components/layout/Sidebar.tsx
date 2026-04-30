@@ -16,6 +16,7 @@ import {
   ChevronDownIcon,
   Bars3Icon,
   XMarkIcon,
+  DocumentIcon,
 } from "@/components/ui/Icons";
 
 type IconComponent = (props: SVGProps<SVGSVGElement>) => JSX.Element;
@@ -61,6 +62,7 @@ export function Sidebar() {
     { kind: "link", href: "/produccion", label: t("datos_produccion"), icon: ChartBarIcon },
     { kind: "link", href: "/economico", label: t("datos_economicos"), icon: BanknotesIcon },
     { kind: "link", href: "/carga-datos", label: t("carga_datos"), icon: ArrowUpTrayIcon },
+    { kind: "link", href: "/documentacion", label: t("documentacion"), icon: DocumentIcon },
     {
       kind: "group",
       key: "mantenimientos",
