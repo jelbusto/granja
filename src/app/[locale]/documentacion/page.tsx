@@ -23,7 +23,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { DocumentIcon, TrashIcon } from "@/components/ui/Icons";
 
-type TipoArchivo = "pdf" | "word" | "powerpoint" | "imagen";
+type TipoArchivo = "pdf" | "word" | "powerpoint" | "foto";
 type Categoria = "informe_tecnico" | "otros";
 
 type DocumentoRaw = {
@@ -49,7 +49,7 @@ function detectTipo(file: File): TipoArchivo {
   if (["doc", "docx"].includes(ext)) return "word";
   if (["ppt", "pptx"].includes(ext)) return "powerpoint";
   if (file.type.startsWith("image/") || ["jpg", "jpeg", "png", "heic", "heif", "webp"].includes(ext))
-    return "imagen";
+    return "foto";
   return "pdf";
 }
 
@@ -59,12 +59,12 @@ function toStoragePath(urlOrPath: string): string {
   return match ? decodeURIComponent(match[1]) : urlOrPath;
 }
 
-const TIPO_LABEL: Record<TipoArchivo, string> = { pdf: "PDF", word: "Word", powerpoint: "PPT", imagen: "Foto" };
+const TIPO_LABEL: Record<TipoArchivo, string> = { pdf: "PDF", word: "Word", powerpoint: "PPT", foto: "Foto" };
 const TIPO_COLOR: Record<TipoArchivo, string> = {
   pdf: "#DC2626",
   word: "#2563EB",
   powerpoint: "#D97706",
-  imagen: "#059669",
+  foto: "#059669",
 };
 const CAT_LABEL: Record<Categoria, string> = { informe_tecnico: "Informe Técnico", otros: "Otros" };
 
@@ -191,7 +191,7 @@ export default function DocumentacionPage() {
     const tipo = detectTipo(file);
     const now = new Date();
     const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}_${String(now.getDate()).padStart(2, "0")}`;
-    const nombre = tipo === "imagen" ? `foto_${dateStr}` : file.name;
+    const nombre = tipo === "foto" ? `foto_${dateStr}` : file.name;
     const storagePath = `${granjaSeleccionada}/${Date.now()}_${file.name}`;
 
     const { error: storageError } = await supabase.storage
@@ -419,7 +419,7 @@ export default function DocumentacionPage() {
                     <td className="py-2 pr-4">
                       <div className="flex items-center gap-3">
                         {/* Thumbnail for images */}
-                        {doc.tipo_archivo === "imagen" ? (
+                        {doc.tipo_archivo === "foto" ? (
                           doc.signedUrl ? (
                             <a href={doc.signedUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
                               <img
