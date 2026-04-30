@@ -42,7 +42,6 @@ type DocumentoRaw = {
 type Documento = DocumentoRaw & { signedUrl: string | null };
 
 const USUARIO_ACTUAL = "Javier Heras";
-const SIGNED_URL_TTL = 3600; // 1 hora
 
 function detectTipo(file: File): TipoArchivo {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -165,31 +164,14 @@ export default function DocumentacionPage() {
 
     const rows = data as DocumentoRaw[];
 
-    // Generate signed URLs in batch for all docs that have a storage path
-    const paths = rows
-      .map((d) => d.storage_path)
-      .filter((p): p is string => !!p)
-      .map(toStoragePath);
-
-    let signedMap: Record<string, string> = {};
-    if (paths.length > 0) {
-      const { data: signed } = await supabase.storage
-        .from("documentos")
-        .createSignedUrls(paths, SIGNED_URL_TTL);
-      if (signed) {
-        signedMap = Object.fromEntries(
-          signed.filter((s) => s.signedUrl).map((s) => [s.path, s.signedUrl])
-        );
-      }
-    }
-
+    // getPublicUrl is synchronous and works for public buckets (no auth needed)
     setDocumentos(
-      rows.map((d) => ({
-        ...d,
-        signedUrl: d.storage_path
-          ? (signedMap[toStoragePath(d.storage_path)] ?? null)
-          : null,
-      }))
+      rows.map((d) => {
+        if (!d.storage_path) return { ...d, signedUrl: null };
+        const path = toStoragePath(d.storage_path);
+        const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
+        return { ...d, signedUrl: publicUrl };
+      })
     );
     setLoading(false);
   }, [supabase, granjaFiltro]);
