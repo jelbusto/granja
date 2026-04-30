@@ -7,8 +7,8 @@ import { z } from "zod";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/lib/i18n/routing";
 import { saveGranjaAction } from "@/lib/actions/granjas";
-import type { GranjaWithSala } from "@/lib/supabase/granjas";
-import type { TipoSalaEnum } from "@/types/database";
+import type { GranjaWithSala, ObjetivosFormData } from "@/lib/supabase/granjas";
+import type { TipoSalaEnum, WeatherStation } from "@/types/database";
 import { PAISES, PROVINCIAS, type PaisCodigo } from "@/lib/geo/provinces";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -48,6 +48,15 @@ const schema = z
     poblacion: z.string().optional(),
     provincia: z.string().optional(),
     pais: z.string().optional(),
+    weather_station_id: z.string().optional(),
+    // Objetivos
+    obj_litros_vaca_dia: nullFloat,
+    obj_calidad_mg_min:  nullFloat,
+    obj_calidad_mp_min:  nullFloat,
+    obj_calidad_ccs_max: nullFloat,
+    obj_calidad_bact_max: nullFloat,
+    obj_calidad_urea_min: nullFloat,
+    obj_calidad_urea_max: nullFloat,
     // Datos del rebaño
     n_patios_lactacion: nullInt,
     preparto: z.boolean(),
@@ -81,6 +90,8 @@ type FormValues = z.infer<typeof schema>;
 
 interface GranjaFormProps {
   granja?: GranjaWithSala | null;
+  weatherStations: WeatherStation[];
+  objetivos?: ObjetivosFormData | null;
   locale: string;
 }
 
@@ -115,7 +126,7 @@ const inputErrCls =
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function GranjaForm({ granja, locale }: GranjaFormProps) {
+export function GranjaForm({ granja, weatherStations, objetivos, locale }: GranjaFormProps) {
   const tc = useTranslations("common");
   const t = useTranslations("granjas");
   const router = useRouter();
@@ -139,6 +150,14 @@ export function GranjaForm({ granja, locale }: GranjaFormProps) {
       poblacion: granja?.poblacion ?? "",
       provincia: granja?.provincia ?? "",
       pais: granja?.pais ?? "",
+      weather_station_id: granja?.weather_station_id ?? "",
+      obj_litros_vaca_dia:  str(objetivos?.litros_vaca_dia)  as unknown as number | null,
+      obj_calidad_mg_min:   str(objetivos?.calidad_mg_min)   as unknown as number | null,
+      obj_calidad_mp_min:   str(objetivos?.calidad_mp_min)   as unknown as number | null,
+      obj_calidad_ccs_max:  str(objetivos?.calidad_ccs_max)  as unknown as number | null,
+      obj_calidad_bact_max: str(objetivos?.calidad_bact_max) as unknown as number | null,
+      obj_calidad_urea_min: str(objetivos?.calidad_urea_min) as unknown as number | null,
+      obj_calidad_urea_max: str(objetivos?.calidad_urea_max) as unknown as number | null,
       // Numeric fields: pass strings — z.preprocess converts them
       n_patios_lactacion: str(granja?.n_patios_lactacion) as unknown as number | null,
       preparto: granja?.preparto ?? false,
@@ -178,7 +197,17 @@ export function GranjaForm({ granja, locale }: GranjaFormProps) {
         secas_descripcion: values.secas_descripcion?.trim() || null,
         pct_eliminacion: values.pct_eliminacion,
         dias_secado: values.dias_secado,
+        weather_station_id: values.weather_station_id?.trim() || null,
         activo: granja?.activo ?? true,
+        objetivos: {
+          litros_vaca_dia:  values.obj_litros_vaca_dia,
+          calidad_mg_min:   values.obj_calidad_mg_min,
+          calidad_mp_min:   values.obj_calidad_mp_min,
+          calidad_ccs_max:  values.obj_calidad_ccs_max,
+          calidad_bact_max: values.obj_calidad_bact_max,
+          calidad_urea_min: values.obj_calidad_urea_min,
+          calidad_urea_max: values.obj_calidad_urea_max,
+        },
         sala: {
           id: sala?.id,
           marca: values.sala_marca?.trim() || null,
@@ -276,6 +305,22 @@ export function GranjaForm({ granja, locale }: GranjaFormProps) {
             ) : (
               <input id="provincia" {...register("provincia")} className={inputCls} />
             )}
+          </div>
+
+          <div className="sm:col-span-2">
+            <Label htmlFor="weather_station_id">{t("estacion_meteorologica")}</Label>
+            <select
+              id="weather_station_id"
+              {...register("weather_station_id")}
+              className={inputCls}
+            >
+              <option value="">{t("estacion_placeholder")}</option>
+              {weatherStations.map((ws) => (
+                <option key={ws.id} value={ws.id}>
+                  {ws.name} ({ws.code})
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </section>
@@ -439,6 +484,70 @@ export function GranjaForm({ granja, locale }: GranjaFormProps) {
             />
             <FieldError message={errors.sala_horas_ordeno?.message} />
           </div>
+        </div>
+      </section>
+
+      {/* ── Objetivos ───────────────────────────────────────────────────── */}
+      <section>
+        <SectionTitle>{t("objetivos")}</SectionTitle>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+          <div>
+            <Label htmlFor="obj_litros_vaca_dia">{t("obj_litros_vaca_dia")}</Label>
+            <div className="relative">
+              <input id="obj_litros_vaca_dia" type="number" min={0} step={0.1} {...register("obj_litros_vaca_dia")} className={inputCls + " pr-14"} />
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-sm">L/vaca</span>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="obj_calidad_mg_min">{t("obj_mg_min")}</Label>
+            <div className="relative">
+              <input id="obj_calidad_mg_min" type="number" min={0} step={0.01} {...register("obj_calidad_mg_min")} className={inputCls + " pr-8"} />
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-sm">%</span>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="obj_calidad_mp_min">{t("obj_mp_min")}</Label>
+            <div className="relative">
+              <input id="obj_calidad_mp_min" type="number" min={0} step={0.01} {...register("obj_calidad_mp_min")} className={inputCls + " pr-8"} />
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-sm">%</span>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="obj_calidad_ccs_max">{t("obj_ccs_max")}</Label>
+            <div className="relative">
+              <input id="obj_calidad_ccs_max" type="number" min={0} {...register("obj_calidad_ccs_max")} className={inputCls + " pr-16"} />
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-sm">mil/ml</span>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="obj_calidad_bact_max">{t("obj_bact_max")}</Label>
+            <div className="relative">
+              <input id="obj_calidad_bact_max" type="number" min={0} {...register("obj_calidad_bact_max")} className={inputCls + " pr-16"} />
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-sm">UFC/ml</span>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="obj_calidad_urea_min">{t("obj_urea_min")}</Label>
+            <div className="relative">
+              <input id="obj_calidad_urea_min" type="number" min={0} {...register("obj_calidad_urea_min")} className={inputCls + " pr-14"} />
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-sm">mg/L</span>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="obj_calidad_urea_max">{t("obj_urea_max")}</Label>
+            <div className="relative">
+              <input id="obj_calidad_urea_max" type="number" min={0} {...register("obj_calidad_urea_max")} className={inputCls + " pr-14"} />
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-sm">mg/L</span>
+            </div>
+          </div>
+
         </div>
       </section>
 

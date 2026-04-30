@@ -12,6 +12,8 @@
   "pais": "País",
   "pais_placeholder": "Seleccionar país",
   "provincia_placeholder": "Seleccionar provincia",
+  "estacion_meteorologica": "Estación meteorológica",
+  "estacion_placeholder": "Sin estación asignada",
   "paises": {
     "ES": "España",
     "PT": "Portugal"
@@ -31,6 +33,14 @@
   "vacas_hora": "Vacas/hora",
   "n_ordenadores": "Nº de ordeñadores",
   "horas_ordeno": "Horas de ordeño",
+  "objetivos": "Objetivos de producción y calidad",
+  "obj_litros_vaca_dia": "L/vaca/día objetivo",
+  "obj_mg_min": "MG mínimo",
+  "obj_mp_min": "MP mínimo",
+  "obj_ccs_max": "CCS máximo",
+  "obj_bact_max": "Bacteriología máxima",
+  "obj_urea_min": "Urea mínima",
+  "obj_urea_max": "Urea máxima",
   "tipos": {
     "espina_de_pez": "Espina de pez",
     "paralela": "Paralela",

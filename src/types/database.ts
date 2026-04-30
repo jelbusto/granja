@@ -84,6 +84,7 @@ export type Database = {
           secas_descripcion: string | null;
           pct_eliminacion: number | null;
           dias_secado: number | null;
+          weather_station_id: string | null;
           activo: boolean;
           created_at: string;
           updated_at: string;
@@ -102,6 +103,7 @@ export type Database = {
           secas_descripcion?: string | null;
           pct_eliminacion?: number | null;
           dias_secado?: number | null;
+          weather_station_id?: string | null;
           activo?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -120,9 +122,34 @@ export type Database = {
           secas_descripcion?: string | null;
           pct_eliminacion?: number | null;
           dias_secado?: number | null;
+          weather_station_id?: string | null;
           activo?: boolean;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      weather_stations: {
+        Row: {
+          id: string;
+          code: string;
+          name: string;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          code: string;
+          name: string;
+          active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          code?: string;
+          name?: string;
+          active?: boolean;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -191,10 +218,6 @@ export type Database = {
           calidad_bact: number | null;
           calidad_ccs: number | null;
           calidad_urea: number | null;
-          temperatura_max: number | null;
-          temperatura_min: number | null;
-          humedad_max: number | null;
-          humedad_min: number | null;
           created_at: string;
         };
         Insert: {
@@ -211,10 +234,6 @@ export type Database = {
           calidad_bact?: number | null;
           calidad_ccs?: number | null;
           calidad_urea?: number | null;
-          temperatura_max?: number | null;
-          temperatura_min?: number | null;
-          humedad_max?: number | null;
-          humedad_min?: number | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["registros_diarios"]["Insert"]>;
@@ -270,6 +289,72 @@ export type Database = {
           }
         ];
       };
+      objetivos_granja: {
+        Row: {
+          id: string;
+          id_granja: string;
+          litros_vaca_dia: number | null;
+          calidad_mg_min: number | null;
+          calidad_mp_min: number | null;
+          calidad_ccs_max: number | null;
+          calidad_bact_max: number | null;
+          calidad_urea_min: number | null;
+          calidad_urea_max: number | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          id_granja: string;
+          litros_vaca_dia?: number | null;
+          calidad_mg_min?: number | null;
+          calidad_mp_min?: number | null;
+          calidad_ccs_max?: number | null;
+          calidad_bact_max?: number | null;
+          calidad_urea_min?: number | null;
+          calidad_urea_max?: number | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["objetivos_granja"]["Insert"]>;
+        Relationships: [];
+      };
+      daily_weather_readings: {
+        Row: {
+          id: string;
+          weather_station_id: string;
+          reading_date: string;
+          temp_min_c: number | null;
+          temp_max_c: number | null;
+          temp_avg_c: number | null;
+          humidity_min_pct: number | null;
+          humidity_max_pct: number | null;
+          humidity_avg_pct: number | null;
+          precipitation_mm: number | null;
+          wind_avg_kmh: number | null;
+          wind_max_kmh: number | null;
+          pressure_hpa: number | null;
+          source: string;
+          fetched_at: string;
+        };
+        Insert: {
+          id?: string;
+          weather_station_id: string;
+          reading_date: string;
+          temp_min_c?: number | null;
+          temp_max_c?: number | null;
+          temp_avg_c?: number | null;
+          humidity_min_pct?: number | null;
+          humidity_max_pct?: number | null;
+          humidity_avg_pct?: number | null;
+          precipitation_mm?: number | null;
+          wind_avg_kmh?: number | null;
+          wind_max_kmh?: number | null;
+          pressure_hpa?: number | null;
+          source?: string;
+          fetched_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["daily_weather_readings"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: {
       v_produccion_diaria: {
@@ -289,10 +374,6 @@ export type Database = {
           calidad_bact: string | number | null;
           calidad_ccs: string | number | null;
           calidad_urea: string | number | null;
-          temperatura_max: string | number | null;
-          temperatura_min: string | number | null;
-          humedad_max: string | number | null;
-          humedad_min: string | number | null;
         };
       };
     };
@@ -323,4 +404,6 @@ export type User = Tables<"users">;
 export type Granja = Tables<"granjas">;
 export type SalaOrdeno = Tables<"salas_ordeno">;
 export type UserGranja = Tables<"user_granjas">;
+export type WeatherStation = Tables<"weather_stations">;
+export type ObjetivosGranja = Tables<"objetivos_granja">;
 export type ProduccionDiaria = Views<"v_produccion_diaria">;

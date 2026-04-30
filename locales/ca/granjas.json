@@ -12,6 +12,8 @@
   "pais": "País",
   "pais_placeholder": "Seleccionar país",
   "provincia_placeholder": "Seleccionar província",
+  "estacion_meteorologica": "Estació meteorològica",
+  "estacion_placeholder": "Sense estació assignada",
   "paises": {
     "ES": "Espanya",
     "PT": "Portugal"
@@ -31,6 +33,14 @@
   "vacas_hora": "Vaques/hora",
   "n_ordenadores": "Nº de munyidors",
   "horas_ordeno": "Hores de munyida",
+  "objetivos": "Objectius de producció i qualitat",
+  "obj_litros_vaca_dia": "L/vaca/dia objectiu",
+  "obj_mg_min": "MG mínim",
+  "obj_mp_min": "MP mínim",
+  "obj_ccs_max": "RCS màxim",
+  "obj_bact_max": "Bacteriologia màxima",
+  "obj_urea_min": "Urea mínima",
+  "obj_urea_max": "Urea màxima",
   "tipos": {
     "espina_de_pez": "Espina de peix",
     "paralela": "Paral·lela",

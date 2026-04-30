@@ -18,10 +18,6 @@ const COLS = [
   { header: "Bacteriología",       field: "calidad_bact",       example: 25           },
   { header: "CCS",                 field: "calidad_ccs",        example: 180          },
   { header: "Urea",                field: "calidad_urea",       example: 240          },
-  { header: "Temp. Max",           field: "temperatura_max",    example: 28           },
-  { header: "Temp. Min",           field: "temperatura_min",    example: 14           },
-  { header: "Humedad Max",         field: "humedad_max",        example: 85           },
-  { header: "Humedad Min",         field: "humedad_min",        example: 55           },
 ] as const;
 
 type ColField = typeof COLS[number]["field"];
@@ -443,8 +439,6 @@ export default function CargaDatosPage() {
                   <Th right>CCS</Th>
                   <Th right>Bact.</Th>
                   <Th right>Urea</Th>
-                  <Th right>T. Max</Th>
-                  <Th right>T. Min</Th>
                 </tr>
               </thead>
               <tbody>
@@ -462,8 +456,6 @@ export default function CargaDatosPage() {
                     <Td right>{fmt(r.calidad_ccs)}</Td>
                     <Td right>{fmt(r.calidad_bact)}</Td>
                     <Td right>{fmt(r.calidad_urea)}</Td>
-                    <Td right>{fmt(r.temperatura_max, 1)}</Td>
-                    <Td right>{fmt(r.temperatura_min, 1)}</Td>
                   </tr>
                 ))}
               </tbody>

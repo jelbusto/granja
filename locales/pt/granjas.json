@@ -12,6 +12,8 @@
   "pais": "País",
   "pais_placeholder": "Selecionar país",
   "provincia_placeholder": "Selecionar distrito / região",
+  "estacion_meteorologica": "Estação meteorológica",
+  "estacion_placeholder": "Sem estação atribuída",
   "paises": {
     "ES": "Espanha",
     "PT": "Portugal"
@@ -31,6 +33,14 @@
   "vacas_hora": "Vacas / hora",
   "n_ordenadores": "Nº de ordenhadores",
   "horas_ordeno": "Horas de ordenha",
+  "objetivos": "Objetivos de produção e qualidade",
+  "obj_litros_vaca_dia": "L/vaca/dia objetivo",
+  "obj_mg_min": "Gordura mínima",
+  "obj_mp_min": "Proteína mínima",
+  "obj_ccs_max": "CCS máxima",
+  "obj_bact_max": "Bacteriologia máxima",
+  "obj_urea_min": "Ureia mínima",
+  "obj_urea_max": "Ureia máxima",
   "tipos": {
     "espina_de_pez": "Espinha de peixe",
     "paralela": "Paralela",

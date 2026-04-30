@@ -1,7 +1,7 @@
 // Cliente para la API OpenData de AEMET
 // Docs: https://opendata.aemet.es/openapi/
 
-const BASE = "https://opendata.aemet.es/openapi/api";
+const BASE = "https://opendata.aemet.es/opendata/api";
 
 // ─── Tipos de respuesta AEMET ─────────────────────────────────────────────────
 

@@ -12,6 +12,8 @@
   "pais": "Country",
   "pais_placeholder": "Select country",
   "provincia_placeholder": "Select province / region",
+  "estacion_meteorologica": "Weather station",
+  "estacion_placeholder": "No station assigned",
   "paises": {
     "ES": "Spain",
     "PT": "Portugal"
@@ -31,6 +33,14 @@
   "vacas_hora": "Cows / hour",
   "n_ordenadores": "No. of milkers",
   "horas_ordeno": "Milking hours",
+  "objetivos": "Production & quality targets",
+  "obj_litros_vaca_dia": "Target L/cow/day",
+  "obj_mg_min": "Min fat (%)",
+  "obj_mp_min": "Min protein (%)",
+  "obj_ccs_max": "Max SCC",
+  "obj_bact_max": "Max bacteriology",
+  "obj_urea_min": "Min urea",
+  "obj_urea_max": "Max urea",
   "tipos": {
     "espina_de_pez": "Herringbone",
     "paralela": "Parallel",
