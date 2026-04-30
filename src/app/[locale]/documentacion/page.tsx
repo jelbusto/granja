@@ -1,28 +1,29 @@
 "use client";
 
 /*
-  Supabase migration required — run in SQL editor:
+  SQL migration — supabase/migrations/documentos.sql:
 
-  CREATE TABLE documentos (
+  CREATE TABLE IF NOT EXISTS documentos (
     id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     nombre        TEXT        NOT NULL,
-    tipo_archivo  TEXT        NOT NULL CHECK (tipo_archivo IN ('pdf', 'word', 'powerpoint')),
+    tipo_archivo  TEXT        NOT NULL CHECK (tipo_archivo IN ('pdf', 'word', 'powerpoint', 'imagen')),
     categoria     TEXT        NOT NULL CHECK (categoria IN ('informe_tecnico', 'otros')),
     fecha_subida  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     subido_por    TEXT        NOT NULL DEFAULT 'Javier Heras',
     tamano_bytes  BIGINT,
     url_archivo   TEXT,
+    id_granja     UUID        REFERENCES granjas(id),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
-  Also create a public Storage bucket named "documentos".
+  Storage bucket "documentos" must exist and be public.
 */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { DocumentIcon, TrashIcon } from "@/components/ui/Icons";
 
-type TipoArchivo = "pdf" | "word" | "powerpoint";
+type TipoArchivo = "pdf" | "word" | "powerpoint" | "imagen";
 type Categoria = "informe_tecnico" | "otros";
 
 type Documento = {
@@ -34,31 +35,50 @@ type Documento = {
   subido_por: string;
   tamano_bytes: number | null;
   url_archivo: string | null;
+  id_granja: string | null;
+  granjas?: { nombre: string } | null;
 };
 
 const USUARIO_ACTUAL = "Javier Heras";
-const ACCEPTED = ".pdf,.doc,.docx,.ppt,.pptx";
 
 function detectTipo(file: File): TipoArchivo {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   if (ext === "pdf") return "pdf";
   if (["doc", "docx"].includes(ext)) return "word";
-  return "powerpoint";
+  if (["ppt", "pptx"].includes(ext)) return "powerpoint";
+  if (file.type.startsWith("image/") || ["jpg", "jpeg", "png", "heic", "heif", "webp"].includes(ext))
+    return "imagen";
+  return "pdf";
 }
 
-const TIPO_LABEL: Record<TipoArchivo, string> = { pdf: "PDF", word: "Word", powerpoint: "PowerPoint" };
-const TIPO_COLOR: Record<TipoArchivo, string> = { pdf: "#DC2626", word: "#2563EB", powerpoint: "#D97706" };
+const TIPO_LABEL: Record<TipoArchivo, string> = { pdf: "PDF", word: "Word", powerpoint: "PPT", imagen: "Foto" };
+const TIPO_COLOR: Record<TipoArchivo, string> = {
+  pdf: "#DC2626",
+  word: "#2563EB",
+  powerpoint: "#D97706",
+  imagen: "#059669",
+};
 const CAT_LABEL: Record<Categoria, string> = { informe_tecnico: "Informe Técnico", otros: "Otros" };
 
 function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("es", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(iso).toLocaleDateString("es", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 function fmtSize(bytes: number | null): string {
   if (!bytes) return "—";
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      style={{ color: "#888780", fontSize: 11, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}
+      className="block mb-1.5"
+    >
+      {children}
+    </span>
+  );
 }
 
 function Th({ children }: { children?: React.ReactNode }) {
@@ -80,39 +100,72 @@ function Td({ children }: { children: React.ReactNode }) {
   );
 }
 
+function CameraIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
+
 export default function DocumentacionPage() {
   const supabase = useRef(createClient()).current;
+
+  const [granjas, setGranjas] = useState<{ id: string; nombre: string }[]>([]);
+  const [granjaSeleccionada, setGranjaSeleccionada] = useState("");
+  const [granjaFiltro, setGranjaFiltro] = useState("todas");
+
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [categoria, setCategoria] = useState<Categoria>("informe_tecnico");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
   const fileRef = useRef<HTMLInputElement>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    supabase
+      .from("granjas")
+      .select("id, nombre")
+      .eq("activo", true)
+      .order("nombre")
+      .then(({ data }) => {
+        const g = (data ?? []) as { id: string; nombre: string }[];
+        setGranjas(g);
+        if (g.length) setGranjaSeleccionada(g[0].id);
+      });
+  }, [supabase]);
 
   const loadDocumentos = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    let q = supabase
       .from("documentos")
-      .select("*")
+      .select("*, granjas(nombre)")
       .order("fecha_subida", { ascending: false });
+    if (granjaFiltro !== "todas") q = q.eq("id_granja", granjaFiltro);
+    const { data, error } = await q;
     if (!error) setDocumentos((data ?? []) as Documento[]);
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, granjaFiltro]);
 
   useEffect(() => {
     loadDocumentos();
   }, [loadDocumentos]);
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  async function uploadFile(file: File) {
+    if (!granjaSeleccionada) {
+      setUploadMsg({ ok: false, text: "Selecciona una granja antes de subir." });
+      return;
+    }
     setUploading(true);
     setUploadMsg(null);
 
     const tipo = detectTipo(file);
-    const fileName = `${Date.now()}_${file.name}`;
+    const fileName = `${granjaSeleccionada}/${Date.now()}_${file.name}`;
 
     let url_archivo: string | null = null;
     const { data: storageData, error: storageError } = await supabase.storage
@@ -132,6 +185,7 @@ export default function DocumentacionPage() {
       subido_por: USUARIO_ACTUAL,
       tamano_bytes: file.size,
       url_archivo,
+      id_granja: granjaSeleccionada,
     } as never);
 
     if (dbError) {
@@ -140,15 +194,19 @@ export default function DocumentacionPage() {
       setUploadMsg({ ok: true, text: `"${file.name}" subido correctamente.` });
       loadDocumentos();
     }
-
     setUploading(false);
+  }
+
+  function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) uploadFile(file);
     e.target.value = "";
   }
 
   async function handleDelete(doc: Documento) {
     if (doc.url_archivo) {
-      const path = doc.url_archivo.split("/documentos/").pop();
-      if (path) await supabase.storage.from("documentos").remove([path]);
+      const match = doc.url_archivo.match(/\/documentos\/(.+)$/);
+      if (match) await supabase.storage.from("documentos").remove([decodeURIComponent(match[1])]);
     }
     const { error } = await supabase.from("documentos").delete().eq("id", doc.id);
     if (!error) setDocumentos((prev) => prev.filter((d) => d.id !== doc.id));
@@ -161,31 +219,34 @@ export default function DocumentacionPage() {
         Documentación
       </h1>
       <p style={{ color: "#888780", fontSize: 13 }} className="mb-8">
-        Repositorio de documentos relacionados con las granjas
+        Documentos y fotos asociados a las granjas
       </p>
 
       {/* Upload card */}
       <div className="bg-white rounded-xl p-6 mb-6" style={{ border: "1px solid #e5e5e5" }}>
         <h2 style={{ fontWeight: 500, fontSize: 14 }} className="text-gray-800 mb-5">
-          Subir documento
+          Subir archivo
         </h2>
 
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex flex-col gap-4 flex-1">
+            {/* Granja selector */}
+            <div>
+              <FieldLabel>Granja</FieldLabel>
+              <select
+                value={granjaSeleccionada}
+                onChange={(e) => setGranjaSeleccionada(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+              >
+                {granjas.map((g) => (
+                  <option key={g.id} value={g.id}>{g.nombre}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Category selector */}
             <div>
-              <label
-                style={{
-                  color: "#888780",
-                  fontSize: 11,
-                  fontWeight: 500,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                }}
-                className="block mb-1.5"
-              >
-                Categoría
-              </label>
+              <FieldLabel>Categoría</FieldLabel>
               <select
                 value={categoria}
                 onChange={(e) => setCategoria(e.target.value as Categoria)}
@@ -196,47 +257,60 @@ export default function DocumentacionPage() {
               </select>
             </div>
 
-            {/* File drop zone */}
+            {/* Upload zones */}
             <div>
-              <label
-                style={{
-                  color: "#888780",
-                  fontSize: 11,
-                  fontWeight: 500,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                }}
-                className="block mb-1.5"
-              >
-                Archivo
-              </label>
+              <FieldLabel>Archivo</FieldLabel>
+
+              {/* Hidden inputs */}
               <input
                 ref={fileRef}
                 type="file"
-                accept={ACCEPTED}
-                onChange={handleFile}
+                accept=".pdf,.doc,.docx,.ppt,.pptx"
+                onChange={handleFileInput}
                 className="hidden"
                 disabled={uploading}
               />
-              <button
-                onClick={() => {
-                  setUploadMsg(null);
-                  fileRef.current?.click();
-                }}
+              <input
+                ref={photoRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileInput}
+                className="hidden"
                 disabled={uploading}
-                className="w-full border-2 border-dashed border-gray-200 rounded-xl py-8 text-center hover:border-gray-300 transition-colors disabled:opacity-50"
-              >
-                <div className="flex flex-col items-center gap-2">
-                  <DocumentIcon className="h-8 w-8 text-gray-300" />
-                  <span style={{ color: "#888780", fontSize: 13 }}>
-                    {uploading ? "Subiendo…" : "Haz clic para seleccionar un archivo"}
-                  </span>
-                  <span style={{ color: "#aaa9a5", fontSize: 11 }}>PDF, Word (.doc/.docx), PowerPoint (.ppt/.pptx)</span>
-                </div>
-              </button>
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => { setUploadMsg(null); fileRef.current?.click(); }}
+                  disabled={uploading || !granjaSeleccionada}
+                  className="border-2 border-dashed border-gray-200 rounded-xl py-6 hover:border-gray-300 transition-colors disabled:opacity-50"
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <DocumentIcon className="h-7 w-7 text-gray-300" />
+                    <span style={{ color: "#888780", fontSize: 13 }}>Documento</span>
+                    <span style={{ color: "#aaa9a5", fontSize: 11 }}>PDF · Word · PowerPoint</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => { setUploadMsg(null); photoRef.current?.click(); }}
+                  disabled={uploading || !granjaSeleccionada}
+                  className="border-2 border-dashed border-gray-200 rounded-xl py-6 hover:border-gray-300 transition-colors disabled:opacity-50"
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <CameraIcon className="h-7 w-7 text-gray-300" />
+                    <span style={{ color: "#888780", fontSize: 13 }}>Foto</span>
+                    <span style={{ color: "#aaa9a5", fontSize: 11 }}>Cámara · Galería</span>
+                  </div>
+                </button>
+              </div>
+
+              {uploading && (
+                <p style={{ color: "#888780", fontSize: 12 }} className="mt-2 text-center">Subiendo…</p>
+              )}
             </div>
 
-            {/* Result message */}
             {uploadMsg && (
               <div
                 className="rounded-lg px-4 py-3 text-sm"
@@ -251,7 +325,7 @@ export default function DocumentacionPage() {
           </div>
 
           {/* Info panel */}
-          <div className="lg:w-72">
+          <div className="lg:w-64">
             <div style={{ backgroundColor: "#f8f7f4", borderRadius: 8 }} className="p-4">
               <p style={{ fontWeight: 500, fontSize: 13 }} className="text-gray-800 mb-2">
                 Formatos aceptados
@@ -260,6 +334,7 @@ export default function DocumentacionPage() {
                 <li>• PDF (.pdf)</li>
                 <li>• Word (.doc, .docx)</li>
                 <li>• PowerPoint (.ppt, .pptx)</li>
+                <li>• Imágenes (jpg, png, heic…)</li>
               </ul>
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <p
@@ -274,39 +349,45 @@ export default function DocumentacionPage() {
                 >
                   Subido por
                 </p>
-                <p style={{ fontSize: 13 }} className="text-gray-700">
-                  {USUARIO_ACTUAL}
-                </p>
+                <p style={{ fontSize: 13 }} className="text-gray-700">{USUARIO_ACTUAL}</p>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Documents table */}
+      {/* Table */}
       <div className="bg-white rounded-xl p-5" style={{ border: "1px solid #e5e5e5" }}>
-        <h2 style={{ fontWeight: 500, fontSize: 14 }} className="text-gray-800 mb-5">
-          Documentos{documentos.length > 0 ? ` (${documentos.length})` : ""}
-        </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+          <h2 style={{ fontWeight: 500, fontSize: 14 }} className="text-gray-800">
+            Archivos{documentos.length > 0 ? ` (${documentos.length})` : ""}
+          </h2>
+          <select
+            value={granjaFiltro}
+            onChange={(e) => setGranjaFiltro(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+          >
+            <option value="todas">Todas las granjas</option>
+            {granjas.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+          </select>
+        </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-40" style={{ color: "#888780" }}>
-            Cargando…
-          </div>
+          <div className="flex items-center justify-center h-40" style={{ color: "#888780" }}>Cargando…</div>
         ) : documentos.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
             <DocumentIcon className="h-10 w-10 text-gray-200" />
-            <p style={{ color: "#888780", fontSize: 13 }}>No hay documentos subidos todavía</p>
+            <p style={{ color: "#888780", fontSize: 13 }}>No hay archivos subidos todavía</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>
-                  <Th>Nombre</Th>
-                  <Th>Formato</Th>
+                  <Th>Archivo</Th>
+                  <Th>Granja</Th>
                   <Th>Categoría</Th>
-                  <Th>Fecha de subida</Th>
+                  <Th>Fecha</Th>
                   <Th>Tamaño</Th>
                   <Th>Subido por</Th>
                   <Th></Th>
@@ -317,18 +398,26 @@ export default function DocumentacionPage() {
                   <tr key={doc.id} className="border-t border-gray-50">
                     <td className="py-3 pr-4">
                       <div className="flex items-center gap-2.5">
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            color: TIPO_COLOR[doc.tipo_archivo],
-                            backgroundColor: `${TIPO_COLOR[doc.tipo_archivo]}18`,
-                            borderRadius: 4,
-                          }}
-                          className="px-1.5 py-0.5 uppercase tracking-wide"
-                        >
-                          {TIPO_LABEL[doc.tipo_archivo]}
-                        </span>
+                        {doc.tipo_archivo === "imagen" && doc.url_archivo ? (
+                          <img
+                            src={doc.url_archivo}
+                            alt={doc.nombre}
+                            className="h-8 w-8 rounded object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: TIPO_COLOR[doc.tipo_archivo],
+                              backgroundColor: `${TIPO_COLOR[doc.tipo_archivo]}18`,
+                              borderRadius: 4,
+                            }}
+                            className="px-1.5 py-0.5 uppercase tracking-wide flex-shrink-0"
+                          >
+                            {TIPO_LABEL[doc.tipo_archivo]}
+                          </span>
+                        )}
                         {doc.url_archivo ? (
                           <a
                             href={doc.url_archivo}
@@ -346,7 +435,7 @@ export default function DocumentacionPage() {
                         )}
                       </div>
                     </td>
-                    <Td>{TIPO_LABEL[doc.tipo_archivo]}</Td>
+                    <Td>{doc.granjas?.nombre ?? "—"}</Td>
                     <Td>{CAT_LABEL[doc.categoria]}</Td>
                     <Td>{fmtDate(doc.fecha_subida)}</Td>
                     <Td>{fmtSize(doc.tamano_bytes)}</Td>
