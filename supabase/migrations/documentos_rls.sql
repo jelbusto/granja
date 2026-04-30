@@ -2,34 +2,16 @@
 
 ALTER TABLE documentos ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Usuarios autenticados pueden ver documentos"
-  ON documentos FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Usuarios autenticados pueden subir documentos"
-  ON documentos FOR INSERT
-  TO authenticated
+CREATE POLICY "Acceso público a documentos"
+  ON documentos FOR ALL
+  TO anon, authenticated
+  USING (true)
   WITH CHECK (true);
-
-CREATE POLICY "Usuarios autenticados pueden eliminar documentos"
-  ON documentos FOR DELETE
-  TO authenticated
-  USING (true);
 
 -- ── Storage bucket "documentos" ───────────────────────────────────────────────
 
-CREATE POLICY "Usuarios autenticados pueden subir archivos"
-  ON storage.objects FOR INSERT
-  TO authenticated
+CREATE POLICY "Acceso público a archivos"
+  ON storage.objects FOR ALL
+  TO anon, authenticated
+  USING (bucket_id = 'documentos')
   WITH CHECK (bucket_id = 'documentos');
-
-CREATE POLICY "Usuarios autenticados pueden leer archivos"
-  ON storage.objects FOR SELECT
-  TO authenticated
-  USING (bucket_id = 'documentos');
-
-CREATE POLICY "Usuarios autenticados pueden eliminar archivos"
-  ON storage.objects FOR DELETE
-  TO authenticated
-  USING (bucket_id = 'documentos');
