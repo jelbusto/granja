@@ -165,6 +165,9 @@ export default function DocumentacionPage() {
     setUploadMsg(null);
 
     const tipo = detectTipo(file);
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}_${String(now.getDate()).padStart(2, "0")}`;
+    const nombre = tipo === "imagen" ? `foto_${dateStr}` : file.name;
     const fileName = `${granjaSeleccionada}/${Date.now()}_${file.name}`;
 
     let url_archivo: string | null = null;
@@ -178,7 +181,7 @@ export default function DocumentacionPage() {
     }
 
     const { error: dbError } = await supabase.from("documentos").insert({
-      nombre: file.name,
+      nombre,
       tipo_archivo: tipo,
       categoria,
       fecha_subida: new Date().toISOString(),
@@ -191,7 +194,7 @@ export default function DocumentacionPage() {
     if (dbError) {
       setUploadMsg({ ok: false, text: `Error al guardar: ${dbError.message}` });
     } else {
-      setUploadMsg({ ok: true, text: `"${file.name}" subido correctamente.` });
+      setUploadMsg({ ok: true, text: `"${nombre}" subido correctamente.` });
       loadDocumentos();
     }
     setUploading(false);
