@@ -1,7 +1,5 @@
 "use client";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 // Web Speech API types (not in standard lib.dom.d.ts)
 declare global {
   interface Window {
@@ -351,8 +349,7 @@ export default function DocumentacionPage() {
       logoData = await r.arrayBuffer();
     } catch { /* logo optional */ }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const children: any[] = [];
+    const children: InstanceType<typeof Paragraph>[] = [];
 
     if (logoData) {
       children.push(
