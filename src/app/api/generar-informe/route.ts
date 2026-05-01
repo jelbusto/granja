@@ -58,8 +58,14 @@ Usa lenguaje técnico-veterinario formal. Si la transcripción no menciona algun
       .join("\n");
 
     return NextResponse.json({ informe: text });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+  } catch (err: unknown) {
+    let msg = err instanceof Error ? err.message : String(err);
+    // Surface Anthropic API error details if present
+    if (err && typeof err === "object" && "status" in err) {
+      const ae = err as { status: number; message?: string };
+      msg = `Anthropic ${ae.status}: ${ae.message ?? msg}`;
+    }
+    console.error("[generar-informe]", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

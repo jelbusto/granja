@@ -328,12 +328,15 @@ export default function DocumentacionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transcripcion, granja: granjaNombre, fechaVisita, veterinario, observaciones }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(body.error ?? res.statusText);
+      }
       const data = await res.json();
       setInformeGenerado(data.informe);
       setVoiceMsg({ ok: true, text: "Informe generado correctamente." });
-    } catch {
-      setVoiceMsg({ ok: false, text: "Error al generar el informe. Comprueba la API key de Anthropic." });
+    } catch (err) {
+      setVoiceMsg({ ok: false, text: `Error: ${err instanceof Error ? err.message : String(err)}` });
     }
     setGenerando(false);
   }
