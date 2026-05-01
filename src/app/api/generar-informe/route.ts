@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
-const client = new Anthropic();
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "ANTHROPIC_API_KEY no configurada en el servidor." },
+      { status: 500 }
+    );
+  }
+
+  const client = new Anthropic({ apiKey });
+
   const { transcripcion, granja, fechaVisita, veterinario, observaciones } =
     await req.json();
 
@@ -35,17 +45,21 @@ Redacta el informe con las siguientes secciones claramente delimitadas:
 
 Usa lenguaje técnico-veterinario formal. Si la transcripción no menciona alguna sección, indícalo brevemente.`;
 
-  const message = await client.messages.create({
-    model: "claude-opus-4-7",
-    max_tokens: 2048,
-    thinking: { type: "adaptive" },
-    messages: [{ role: "user", content: prompt }],
-  });
+  try {
+    const message = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2048,
+      messages: [{ role: "user", content: prompt }],
+    });
 
-  const text = message.content
-    .filter((b) => b.type === "text")
-    .map((b) => (b as { type: "text"; text: string }).text)
-    .join("\n");
+    const text = message.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { type: "text"; text: string }).text)
+      .join("\n");
 
-  return NextResponse.json({ informe: text });
+    return NextResponse.json({ informe: text });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
