@@ -166,6 +166,7 @@ export default function DocumentacionPage() {
   const [generando, setGenerando] = useState(false);
   const [informeGenerado, setInformeGenerado] = useState("");
   const [voiceMsg, setVoiceMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [notaExpandida, setNotaExpandida] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const finalTranscriptRef = useRef("");
 
@@ -427,294 +428,222 @@ export default function DocumentacionPage() {
 
       {/* Upload card */}
       <div className="bg-white rounded-xl p-6 mb-6" style={{ border: "1px solid #e5e5e5" }}>
-        <h2 style={{ fontWeight: 500, fontSize: 14 }} className="text-gray-800 mb-5">
-          Subir archivo
-        </h2>
-
-        <div className="flex flex-col lg:flex-row gap-6">
-          <div className="flex flex-col gap-4 flex-1">
-            <div>
-              <FieldLabel>Granja</FieldLabel>
-              <select
-                value={granjaSeleccionada}
-                onChange={(e) => setGranjaSeleccionada(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
-              >
-                {granjas.map((g) => (
-                  <option key={g.id} value={g.id}>{g.nombre}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <FieldLabel>Categoría</FieldLabel>
-              <select
-                value={categoria}
-                onChange={(e) => setCategoria(e.target.value as Categoria)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
-              >
-                <option value="informe_tecnico">Informe Técnico</option>
-                <option value="otros">Otros</option>
-              </select>
-            </div>
-
-            <div>
-              <FieldLabel>Archivo</FieldLabel>
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".pdf,.doc,.docx,.ppt,.pptx"
-                onChange={handleFileInput}
-                className="hidden"
-                disabled={uploading}
-              />
-              <input
-                ref={photoRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleFileInput}
-                className="hidden"
-                disabled={uploading}
-              />
-
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => { setUploadMsg(null); fileRef.current?.click(); }}
-                  disabled={uploading || !granjaSeleccionada}
-                  className="border-2 border-dashed border-gray-200 rounded-xl py-6 hover:border-gray-300 transition-colors disabled:opacity-50"
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <DocumentIcon className="h-7 w-7 text-gray-300" />
-                    <span style={{ color: "#888780", fontSize: 13 }}>Documento</span>
-                    <span style={{ color: "#aaa9a5", fontSize: 11 }}>PDF · Word · PowerPoint</span>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => { setUploadMsg(null); photoRef.current?.click(); }}
-                  disabled={uploading || !granjaSeleccionada}
-                  className="border-2 border-dashed border-gray-200 rounded-xl py-6 hover:border-gray-300 transition-colors disabled:opacity-50"
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <CameraIcon className="h-7 w-7 text-gray-300" />
-                    <span style={{ color: "#888780", fontSize: 13 }}>Foto</span>
-                    <span style={{ color: "#aaa9a5", fontSize: 11 }}>Cámara · Galería</span>
-                  </div>
-                </button>
-              </div>
-
-              {uploading && (
-                <p style={{ color: "#888780", fontSize: 12 }} className="mt-2 text-center">Subiendo…</p>
-              )}
-            </div>
-
-            {uploadMsg && (
-              <div
-                className="rounded-lg px-4 py-3 text-sm"
-                style={{
-                  backgroundColor: uploadMsg.ok ? "#ECFDF5" : "#FEF2F2",
-                  color: uploadMsg.ok ? "#3B6D11" : "#A32D2D",
-                }}
-              >
-                {uploadMsg.text}
-              </div>
-            )}
-          </div>
-
-          <div className="lg:w-64">
-            <div style={{ backgroundColor: "#f8f7f4", borderRadius: 8 }} className="p-4">
-              <p style={{ fontWeight: 500, fontSize: 13 }} className="text-gray-800 mb-2">
-                Formatos aceptados
-              </p>
-              <ul style={{ color: "#888780", fontSize: 12 }} className="space-y-1">
-                <li>• PDF (.pdf)</li>
-                <li>• Word (.doc, .docx)</li>
-                <li>• PowerPoint (.ppt, .pptx)</li>
-                <li>• Imágenes (jpg, png, heic…)</li>
-              </ul>
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <p
-                  style={{
-                    color: "#888780",
-                    fontSize: 11,
-                    fontWeight: 500,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                  }}
-                  className="mb-1"
-                >
-                  Subido por
-                </p>
-                <p style={{ fontSize: 13 }} className="text-gray-700">{USUARIO_ACTUAL}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Voice recording card */}
-      <div className="bg-white rounded-xl p-6 mb-6" style={{ border: "1px solid #e5e5e5" }}>
-        <div className="flex items-center gap-2 mb-5">
-          <MicrophoneIcon className="h-4 w-4" style={{ color: "var(--accent)" }} />
-          <h2 style={{ fontWeight: 500, fontSize: 14 }} className="text-gray-800">
-            Nota de voz — Informe veterinario
-          </h2>
+        {/* Granja */}
+        <div className="mb-5">
+          <FieldLabel>Granja</FieldLabel>
+          <select
+            value={granjaSeleccionada}
+            onChange={(e) => setGranjaSeleccionada(e.target.value)}
+            className="w-full sm:w-72 text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+          >
+            {granjas.map((g) => (
+              <option key={g.id} value={g.id}>{g.nombre}</option>
+            ))}
+          </select>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* Left column: metadata + recording */}
-          <div className="flex flex-col gap-4 flex-1">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <FieldLabel>Granja</FieldLabel>
-                <select
-                  value={granjaSeleccionada}
-                  onChange={(e) => setGranjaSeleccionada(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
-                >
-                  {granjas.map((g) => (
-                    <option key={g.id} value={g.id}>{g.nombre}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <FieldLabel>Fecha de visita</FieldLabel>
-                <input
-                  type="date"
-                  value={fechaVisita}
-                  onChange={(e) => setFechaVisita(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
-                />
-              </div>
-              <div>
-                <FieldLabel>Veterinario</FieldLabel>
-                <input
-                  type="text"
-                  value={veterinario}
-                  onChange={(e) => setVeterinario(e.target.value)}
-                  placeholder="Nombre del veterinario"
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
-                />
-              </div>
-            </div>
+        {/* Hidden file inputs */}
+        <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx" onChange={handleFileInput} className="hidden" disabled={uploading} />
+        <input ref={photoRef} type="file" accept="image/*" capture="environment" onChange={handleFileInput} className="hidden" disabled={uploading} />
 
-            <div>
-              <FieldLabel>Observaciones adicionales</FieldLabel>
-              <textarea
-                value={observaciones}
-                onChange={(e) => setObservaciones(e.target.value)}
-                placeholder="Notas adicionales que no quieres dictar…"
-                rows={2}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent resize-none"
+        {/* 3 options */}
+        <div className="grid grid-cols-3 gap-3">
+          <button
+            onClick={() => { setUploadMsg(null); setNotaExpandida(false); fileRef.current?.click(); }}
+            disabled={uploading || !granjaSeleccionada}
+            className="border border-gray-200 rounded-xl py-5 hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            <div className="flex flex-col items-center gap-2">
+              <DocumentIcon className="h-6 w-6 text-gray-400" />
+              <span style={{ color: "#374151", fontSize: 13, fontWeight: 500 }}>Documento</span>
+              <span style={{ color: "#aaa9a5", fontSize: 11 }}>PDF · Word · PPT</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => { setUploadMsg(null); setNotaExpandida(false); photoRef.current?.click(); }}
+            disabled={uploading || !granjaSeleccionada}
+            className="border border-gray-200 rounded-xl py-5 hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            <div className="flex flex-col items-center gap-2">
+              <CameraIcon className="h-6 w-6 text-gray-400" />
+              <span style={{ color: "#374151", fontSize: 13, fontWeight: 500 }}>Foto</span>
+              <span style={{ color: "#aaa9a5", fontSize: 11 }}>Cámara · Galería</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => { setVoiceMsg(null); setNotaExpandida((v) => !v); }}
+            disabled={uploading || !granjaSeleccionada}
+            className="border rounded-xl py-5 transition-colors disabled:opacity-50"
+            style={
+              notaExpandida
+                ? { borderColor: "var(--accent)", backgroundColor: "#f5f3ff" }
+                : { borderColor: "#e5e5e5" }
+            }
+          >
+            <div className="flex flex-col items-center gap-2">
+              <MicrophoneIcon
+                className="h-6 w-6"
+                style={{ color: notaExpandida ? "var(--accent)" : "#9ca3af" }}
               />
+              <span style={{ color: notaExpandida ? "var(--accent)" : "#374151", fontSize: 13, fontWeight: 500 }}>
+                Nota de voz
+              </span>
+              <span style={{ color: "#aaa9a5", fontSize: 11 }}>Informe veterinario</span>
             </div>
+          </button>
+        </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <FieldLabel>Transcripción</FieldLabel>
-                <button
-                  onClick={toggleRecording}
-                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium transition-colors"
-                  style={
-                    recording
-                      ? { backgroundColor: "#FEF2F2", color: "#DC2626", border: "1px solid #FECACA" }
-                      : { backgroundColor: "var(--accent)", color: "#fff", border: "none" }
-                  }
-                >
-                  {recording ? (
-                    <>
-                      <StopCircleIcon className="h-4 w-4" />
-                      Detener grabación
-                    </>
-                  ) : (
-                    <>
-                      <MicrophoneIcon className="h-4 w-4" />
-                      Grabar
-                    </>
-                  )}
-                </button>
-              </div>
-              {recording && (
-                <div className="flex items-center gap-2 mb-2">
-                  <span
-                    className="inline-block h-2 w-2 rounded-full animate-pulse"
-                    style={{ backgroundColor: "#DC2626" }}
-                  />
-                  <span style={{ color: "#DC2626", fontSize: 12 }}>Grabando…</span>
+        {/* Upload feedback */}
+        {uploading && (
+          <p style={{ color: "#888780", fontSize: 12 }} className="mt-4 text-center">Subiendo…</p>
+        )}
+        {uploadMsg && (
+          <div
+            className="mt-4 rounded-lg px-4 py-3 text-sm"
+            style={{
+              backgroundColor: uploadMsg.ok ? "#ECFDF5" : "#FEF2F2",
+              color: uploadMsg.ok ? "#3B6D11" : "#A32D2D",
+            }}
+          >
+            {uploadMsg.text}
+          </div>
+        )}
+
+        {/* Nota de voz — expanded */}
+        {notaExpandida && (
+          <div className="mt-5 pt-5 border-t border-gray-100">
+            <div className="flex flex-col lg:flex-row gap-6">
+              {/* Left: form + recording */}
+              <div className="flex flex-col gap-4 flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <FieldLabel>Fecha de visita</FieldLabel>
+                    <input
+                      type="date"
+                      value={fechaVisita}
+                      onChange={(e) => setFechaVisita(e.target.value)}
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>Veterinario</FieldLabel>
+                    <input
+                      type="text"
+                      value={veterinario}
+                      onChange={(e) => setVeterinario(e.target.value)}
+                      placeholder="Nombre del veterinario"
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+                    />
+                  </div>
                 </div>
-              )}
-              <textarea
-                value={transcripcion}
-                onChange={(e) => {
-                  setTranscripcion(e.target.value);
-                  finalTranscriptRef.current = e.target.value;
-                }}
-                placeholder="La transcripción aparecerá aquí mientras hablas, o puedes escribirla directamente…"
-                rows={5}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent resize-none"
-              />
-            </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={generarInforme}
-                disabled={generando || !transcripcion.trim()}
-                className="px-5 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
-                style={{ backgroundColor: "var(--accent)" }}
-              >
-                {generando ? "Generando…" : "Generar informe con IA"}
-              </button>
-              {informeGenerado && (
-                <button
-                  onClick={descargarWord}
-                  className="px-5 py-2 rounded-lg text-sm font-medium transition-colors"
+                <div>
+                  <FieldLabel>Observaciones adicionales</FieldLabel>
+                  <textarea
+                    value={observaciones}
+                    onChange={(e) => setObservaciones(e.target.value)}
+                    placeholder="Notas adicionales que no quieres dictar…"
+                    rows={2}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent resize-none"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <FieldLabel>Transcripción</FieldLabel>
+                    <button
+                      onClick={toggleRecording}
+                      className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium transition-colors"
+                      style={
+                        recording
+                          ? { backgroundColor: "#FEF2F2", color: "#DC2626", border: "1px solid #FECACA" }
+                          : { backgroundColor: "var(--accent)", color: "#fff", border: "none" }
+                      }
+                    >
+                      {recording ? (
+                        <><StopCircleIcon className="h-4 w-4" /> Detener</>
+                      ) : (
+                        <><MicrophoneIcon className="h-4 w-4" /> Grabar</>
+                      )}
+                    </button>
+                  </div>
+                  {recording && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="inline-block h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: "#DC2626" }} />
+                      <span style={{ color: "#DC2626", fontSize: 12 }}>Grabando…</span>
+                    </div>
+                  )}
+                  <textarea
+                    value={transcripcion}
+                    onChange={(e) => {
+                      setTranscripcion(e.target.value);
+                      finalTranscriptRef.current = e.target.value;
+                    }}
+                    placeholder="La transcripción aparecerá aquí mientras hablas, o puedes escribirla directamente…"
+                    rows={5}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent resize-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={generarInforme}
+                    disabled={generando || !transcripcion.trim()}
+                    className="px-5 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
+                    style={{ backgroundColor: "var(--accent)" }}
+                  >
+                    {generando ? "Generando…" : "Generar informe con IA"}
+                  </button>
+                  {informeGenerado && (
+                    <button
+                      onClick={descargarWord}
+                      className="px-5 py-2 rounded-lg text-sm font-medium transition-colors"
+                      style={{ backgroundColor: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE" }}
+                    >
+                      Descargar Word
+                    </button>
+                  )}
+                </div>
+
+                {voiceMsg && (
+                  <div
+                    className="rounded-lg px-4 py-3 text-sm"
+                    style={{
+                      backgroundColor: voiceMsg.ok ? "#ECFDF5" : "#FEF2F2",
+                      color: voiceMsg.ok ? "#3B6D11" : "#A32D2D",
+                    }}
+                  >
+                    {voiceMsg.text}
+                  </div>
+                )}
+              </div>
+
+              {/* Right: preview */}
+              <div className="lg:w-80">
+                <FieldLabel>Vista previa del informe</FieldLabel>
+                <div
+                  className="rounded-xl p-4 overflow-y-auto"
                   style={{
-                    backgroundColor: "#EFF6FF",
-                    color: "#2563EB",
-                    border: "1px solid #BFDBFE",
+                    backgroundColor: "#f8f7f4",
+                    border: "1px solid #e5e5e5",
+                    minHeight: 200,
+                    maxHeight: 420,
+                    fontSize: 12,
+                    color: "#374151",
+                    whiteSpace: "pre-wrap",
+                    fontFamily: "monospace",
                   }}
                 >
-                  Descargar Word
-                </button>
-              )}
-            </div>
-
-            {voiceMsg && (
-              <div
-                className="rounded-lg px-4 py-3 text-sm"
-                style={{
-                  backgroundColor: voiceMsg.ok ? "#ECFDF5" : "#FEF2F2",
-                  color: voiceMsg.ok ? "#3B6D11" : "#A32D2D",
-                }}
-              >
-                {voiceMsg.text}
+                  {informeGenerado || (
+                    <span style={{ color: "#aaa9a5" }}>El informe formateado aparecerá aquí…</span>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-
-          {/* Right column: preview */}
-          <div className="lg:w-80">
-            <FieldLabel>Vista previa del informe</FieldLabel>
-            <div
-              className="rounded-xl p-4 overflow-y-auto"
-              style={{
-                backgroundColor: "#f8f7f4",
-                border: "1px solid #e5e5e5",
-                minHeight: 200,
-                maxHeight: 420,
-                fontSize: 12,
-                color: "#374151",
-                whiteSpace: "pre-wrap",
-                fontFamily: "monospace",
-              }}
-            >
-              {informeGenerado || (
-                <span style={{ color: "#aaa9a5" }}>El informe formateado aparecerá aquí…</span>
-              )}
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Table */}
