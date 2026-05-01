@@ -1,5 +1,29 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+// Web Speech API types (not in standard lib.dom.d.ts)
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognitionInstance;
+    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
+  }
+  interface SpeechRecognitionInstance extends EventTarget {
+    lang: string;
+    continuous: boolean;
+    interimResults: boolean;
+    onresult: ((e: SpeechRecognitionResultEvent) => void) | null;
+    onerror: (() => void) | null;
+    onend: (() => void) | null;
+    start(): void;
+    stop(): void;
+  }
+  interface SpeechRecognitionResultEvent extends Event {
+    resultIndex: number;
+    results: SpeechRecognitionResultList;
+  }
+}
+
 /*
   SQL migration — supabase/migrations/documentos.sql:
 
@@ -21,7 +45,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { DocumentIcon, TrashIcon } from "@/components/ui/Icons";
+import { DocumentIcon, MicrophoneIcon, StopCircleIcon, TrashIcon } from "@/components/ui/Icons";
 
 type TipoArchivo = "pdf" | "word" | "powerpoint" | "foto";
 type Categoria = "informe_tecnico" | "otros";
@@ -135,6 +159,18 @@ export default function DocumentacionPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const photoRef = useRef<HTMLInputElement>(null);
 
+  // Voice recording state
+  const [recording, setRecording] = useState(false);
+  const [transcripcion, setTranscripcion] = useState("");
+  const [fechaVisita, setFechaVisita] = useState(() => new Date().toISOString().split("T")[0]);
+  const [veterinario, setVeterinario] = useState("");
+  const [observaciones, setObservaciones] = useState("");
+  const [generando, setGenerando] = useState(false);
+  const [informeGenerado, setInformeGenerado] = useState("");
+  const [voiceMsg, setVoiceMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const finalTranscriptRef = useRef("");
+
   useEffect(() => {
     supabase
       .from("granjas")
@@ -237,6 +273,150 @@ export default function DocumentacionPage() {
     const { error } = await supabase.from("documentos").delete().eq("id", doc.id);
     if (!error) setDocumentos((prev) => prev.filter((d) => d.id !== doc.id));
     setDeleteConfirm(null);
+  }
+
+  function toggleRecording() {
+    if (recording) {
+      recognitionRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    const SR =
+      typeof window !== "undefined"
+        ? window.SpeechRecognition || window.webkitSpeechRecognition
+        : null;
+    if (!SR) {
+      setVoiceMsg({ ok: false, text: "Tu navegador no soporta reconocimiento de voz. Prueba Chrome o Edge." });
+      return;
+    }
+    finalTranscriptRef.current = transcripcion;
+    const recognition = new SR();
+    recognition.lang = "es-ES";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (e: SpeechRecognitionResultEvent) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          finalTranscriptRef.current += e.results[i][0].transcript + " ";
+        } else {
+          interim += e.results[i][0].transcript;
+        }
+      }
+      setTranscripcion(finalTranscriptRef.current + interim);
+    };
+    recognition.onerror = () => {
+      setRecording(false);
+      setVoiceMsg({ ok: false, text: "Error en el reconocimiento de voz." });
+    };
+    recognition.onend = () => setRecording(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setRecording(true);
+  }
+
+  async function generarInforme() {
+    if (!transcripcion.trim()) {
+      setVoiceMsg({ ok: false, text: "Graba o escribe la transcripción primero." });
+      return;
+    }
+    setGenerando(true);
+    setVoiceMsg(null);
+    const granjaNombre = granjas.find((g) => g.id === granjaSeleccionada)?.nombre ?? granjaSeleccionada;
+    try {
+      const res = await fetch("/api/generar-informe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcripcion, granja: granjaNombre, fechaVisita, veterinario, observaciones }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setInformeGenerado(data.informe);
+      setVoiceMsg({ ok: true, text: "Informe generado correctamente." });
+    } catch {
+      setVoiceMsg({ ok: false, text: "Error al generar el informe. Comprueba la API key de Anthropic." });
+    }
+    setGenerando(false);
+  }
+
+  async function descargarWord() {
+    const {
+      Document, Packer, Paragraph, TextRun, ImageRun,
+      HeadingLevel, AlignmentType,
+    } = await import("docx");
+
+    let logoData: ArrayBuffer | null = null;
+    try {
+      const r = await fetch("/logo.png");
+      logoData = await r.arrayBuffer();
+    } catch { /* logo optional */ }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const children: any[] = [];
+
+    if (logoData) {
+      children.push(
+        new Paragraph({
+          children: [
+            new ImageRun({
+              data: logoData,
+              transformation: { width: 160, height: 64 },
+              type: "png",
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+        })
+      );
+      children.push(new Paragraph({ text: "" }));
+    }
+
+    children.push(
+      new Paragraph({
+        text: "INFORME DE VISITA VETERINARIA",
+        heading: HeadingLevel.HEADING_1,
+        alignment: AlignmentType.CENTER,
+      })
+    );
+    children.push(new Paragraph({ text: "" }));
+
+    const granjaNombre = granjas.find((g) => g.id === granjaSeleccionada)?.nombre ?? granjaSeleccionada;
+    const meta = [
+      `Granja: ${granjaNombre}`,
+      `Fecha de visita: ${fechaVisita}`,
+      `Veterinario: ${veterinario || "—"}`,
+    ];
+    for (const m of meta) {
+      children.push(
+        new Paragraph({
+          children: [new TextRun({ text: m, bold: true, size: 22 })],
+        })
+      );
+    }
+    children.push(new Paragraph({ text: "" }));
+
+    for (const line of informeGenerado.split("\n")) {
+      if (line.trim() === "") {
+        children.push(new Paragraph({ text: "" }));
+      } else if (/^\d+\.\s+[A-ZÁÉÍÓÚÑ]/.test(line.trim())) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: line.trim(), bold: true, size: 24 })],
+            spacing: { before: 240 },
+          })
+        );
+      } else {
+        children.push(new Paragraph({ children: [new TextRun({ text: line, size: 22 })] }));
+      }
+    }
+
+    const doc = new Document({ sections: [{ children }] });
+    const blob = await Packer.toBlob(doc);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `informe_veterinario_${granjaNombre}_${fechaVisita}.docx`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -371,6 +551,170 @@ export default function DocumentacionPage() {
                 </p>
                 <p style={{ fontSize: 13 }} className="text-gray-700">{USUARIO_ACTUAL}</p>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Voice recording card */}
+      <div className="bg-white rounded-xl p-6 mb-6" style={{ border: "1px solid #e5e5e5" }}>
+        <div className="flex items-center gap-2 mb-5">
+          <MicrophoneIcon className="h-4 w-4" style={{ color: "var(--accent)" }} />
+          <h2 style={{ fontWeight: 500, fontSize: 14 }} className="text-gray-800">
+            Nota de voz — Informe veterinario
+          </h2>
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Left column: metadata + recording */}
+          <div className="flex flex-col gap-4 flex-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <FieldLabel>Granja</FieldLabel>
+                <select
+                  value={granjaSeleccionada}
+                  onChange={(e) => setGranjaSeleccionada(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+                >
+                  {granjas.map((g) => (
+                    <option key={g.id} value={g.id}>{g.nombre}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <FieldLabel>Fecha de visita</FieldLabel>
+                <input
+                  type="date"
+                  value={fechaVisita}
+                  onChange={(e) => setFechaVisita(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+              <div>
+                <FieldLabel>Veterinario</FieldLabel>
+                <input
+                  type="text"
+                  value={veterinario}
+                  onChange={(e) => setVeterinario(e.target.value)}
+                  placeholder="Nombre del veterinario"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+            </div>
+
+            <div>
+              <FieldLabel>Observaciones adicionales</FieldLabel>
+              <textarea
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                placeholder="Notas adicionales que no quieres dictar…"
+                rows={2}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent resize-none"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <FieldLabel>Transcripción</FieldLabel>
+                <button
+                  onClick={toggleRecording}
+                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium transition-colors"
+                  style={
+                    recording
+                      ? { backgroundColor: "#FEF2F2", color: "#DC2626", border: "1px solid #FECACA" }
+                      : { backgroundColor: "var(--accent)", color: "#fff", border: "none" }
+                  }
+                >
+                  {recording ? (
+                    <>
+                      <StopCircleIcon className="h-4 w-4" />
+                      Detener grabación
+                    </>
+                  ) : (
+                    <>
+                      <MicrophoneIcon className="h-4 w-4" />
+                      Grabar
+                    </>
+                  )}
+                </button>
+              </div>
+              {recording && (
+                <div className="flex items-center gap-2 mb-2">
+                  <span
+                    className="inline-block h-2 w-2 rounded-full animate-pulse"
+                    style={{ backgroundColor: "#DC2626" }}
+                  />
+                  <span style={{ color: "#DC2626", fontSize: 12 }}>Grabando…</span>
+                </div>
+              )}
+              <textarea
+                value={transcripcion}
+                onChange={(e) => {
+                  setTranscripcion(e.target.value);
+                  finalTranscriptRef.current = e.target.value;
+                }}
+                placeholder="La transcripción aparecerá aquí mientras hablas, o puedes escribirla directamente…"
+                rows={5}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent resize-none"
+              />
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={generarInforme}
+                disabled={generando || !transcripcion.trim()}
+                className="px-5 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
+                style={{ backgroundColor: "var(--accent)" }}
+              >
+                {generando ? "Generando…" : "Generar informe con IA"}
+              </button>
+              {informeGenerado && (
+                <button
+                  onClick={descargarWord}
+                  className="px-5 py-2 rounded-lg text-sm font-medium transition-colors"
+                  style={{
+                    backgroundColor: "#EFF6FF",
+                    color: "#2563EB",
+                    border: "1px solid #BFDBFE",
+                  }}
+                >
+                  Descargar Word
+                </button>
+              )}
+            </div>
+
+            {voiceMsg && (
+              <div
+                className="rounded-lg px-4 py-3 text-sm"
+                style={{
+                  backgroundColor: voiceMsg.ok ? "#ECFDF5" : "#FEF2F2",
+                  color: voiceMsg.ok ? "#3B6D11" : "#A32D2D",
+                }}
+              >
+                {voiceMsg.text}
+              </div>
+            )}
+          </div>
+
+          {/* Right column: preview */}
+          <div className="lg:w-80">
+            <FieldLabel>Vista previa del informe</FieldLabel>
+            <div
+              className="rounded-xl p-4 overflow-y-auto"
+              style={{
+                backgroundColor: "#f8f7f4",
+                border: "1px solid #e5e5e5",
+                minHeight: 200,
+                maxHeight: 420,
+                fontSize: 12,
+                color: "#374151",
+                whiteSpace: "pre-wrap",
+                fontFamily: "monospace",
+              }}
+            >
+              {informeGenerado || (
+                <span style={{ color: "#aaa9a5" }}>El informe formateado aparecerá aquí…</span>
+              )}
             </div>
           </div>
         </div>
