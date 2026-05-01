@@ -24,29 +24,15 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const prompt = `Eres un veterinario redactando un informe oficial de visita a una explotación ganadera de ganado lechero.
-Basándote en la siguiente transcripción de voz, redacta un informe veterinario formal y estructurado en español.
+  const prompt = `Eres un veterinario. Reescribe el siguiente texto en lenguaje formal y profesional, como si fuera una nota de visita veterinaria oficial. Mantén toda la información del texto original, pero corrígela gramaticalmente y dale un tono técnico-formal. No añadas secciones ni estructura, solo redacta el texto de forma continua y fluida.
 
-Datos de la visita:
+Datos de contexto (inclúyelos al inicio si no están en el texto):
 - Granja: ${granja}
 - Fecha de visita: ${fechaVisita}
-- Veterinario: ${veterinario || "No especificado"}
-- Observaciones adicionales: ${observaciones?.trim() || "Ninguna"}
+- Veterinario: ${veterinario || "No especificado"}${observaciones?.trim() ? `\n- Observaciones adicionales: ${observaciones.trim()}` : ""}
 
-Transcripción de voz del veterinario:
-${transcripcion}
-
-Redacta el informe con las siguientes secciones claramente delimitadas:
-
-1. DATOS DE LA VISITA
-2. MOTIVO DE LA VISITA
-3. HALLAZGOS CLÍNICOS
-4. DIAGNÓSTICO
-5. TRATAMIENTO Y RECOMENDACIONES
-6. PRÓXIMA VISITA
-7. OBSERVACIONES FINALES
-
-Usa lenguaje técnico-veterinario formal. Si la transcripción no menciona alguna sección, indícalo brevemente.`;
+Texto a reescribir:
+${transcripcion}`;
 
   // Stream the response so Vercel doesn't time out on slow responses
   const encoder = new TextEncoder();

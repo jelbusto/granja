@@ -166,6 +166,7 @@ export default function DocumentacionPage() {
   const [generando, setGenerando] = useState(false);
   const [informeGenerado, setInformeGenerado] = useState("");
   const [voiceMsg, setVoiceMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [subiendoInforme, setSubiendoInforme] = useState(false);
   const [notaExpandida, setNotaExpandida] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const finalTranscriptRef = useRef("");
@@ -344,7 +345,7 @@ export default function DocumentacionPage() {
     setGenerando(false);
   }
 
-  async function descargarWord() {
+  async function buildDocx() {
     const {
       Document, Packer, Paragraph, TextRun, ImageRun,
       HeadingLevel, AlignmentType,
@@ -414,13 +415,49 @@ export default function DocumentacionPage() {
     }
 
     const doc = new Document({ sections: [{ children }] });
-    const blob = await Packer.toBlob(doc);
-    const url = URL.createObjectURL(blob);
+    return { blob: await Packer.toBlob(doc), nombre: `informe_veterinario_${granjaNombre}_${fechaVisita}` };
+  }
+
+  async function descargarWord() {
+    const result = await buildDocx();
+    if (!result) return;
+    const url = URL.createObjectURL(result.blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `informe_veterinario_${granjaNombre}_${fechaVisita}.docx`;
+    a.download = `${result.nombre}.docx`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function subirAlRepositorio() {
+    if (!informeGenerado || !granjaSeleccionada) return;
+    setSubiendoInforme(true);
+    setVoiceMsg(null);
+    try {
+      const result = await buildDocx();
+      if (!result) throw new Error("No se pudo generar el documento.");
+      const storagePath = `${granjaSeleccionada}/${Date.now()}_${result.nombre}.docx`;
+      const { error: storageError } = await supabase.storage
+        .from("documentos")
+        .upload(storagePath, result.blob, { contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+      if (storageError) throw new Error(storageError.message);
+      const { error: dbError } = await supabase.from("documentos").insert({
+        nombre: result.nombre,
+        tipo_archivo: "word",
+        categoria: "informe_tecnico",
+        fecha_subida: new Date().toISOString(),
+        subido_por: USUARIO_ACTUAL,
+        tamano_bytes: result.blob.size,
+        storage_path: storagePath,
+        id_granja: granjaSeleccionada,
+      } as never);
+      if (dbError) throw new Error(dbError.message);
+      setVoiceMsg({ ok: true, text: `"${result.nombre}" guardado en el repositorio.` });
+      loadDocumentos();
+    } catch (err) {
+      setVoiceMsg({ ok: false, text: `Error al subir: ${err instanceof Error ? err.message : String(err)}` });
+    }
+    setSubiendoInforme(false);
   }
 
   return (
@@ -593,23 +630,33 @@ export default function DocumentacionPage() {
                   />
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <button
                     onClick={generarInforme}
                     disabled={generando || !transcripcion.trim()}
                     className="px-5 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
                     style={{ backgroundColor: "var(--accent)" }}
                   >
-                    {generando ? "Generando…" : "Generar informe con IA"}
+                    {generando ? "Generando…" : "Generar con IA"}
                   </button>
                   {informeGenerado && (
-                    <button
-                      onClick={descargarWord}
-                      className="px-5 py-2 rounded-lg text-sm font-medium transition-colors"
-                      style={{ backgroundColor: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE" }}
-                    >
-                      Descargar Word
-                    </button>
+                    <>
+                      <button
+                        onClick={descargarWord}
+                        className="px-5 py-2 rounded-lg text-sm font-medium transition-colors"
+                        style={{ backgroundColor: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE" }}
+                      >
+                        Descargar Word
+                      </button>
+                      <button
+                        onClick={subirAlRepositorio}
+                        disabled={subiendoInforme}
+                        className="px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                        style={{ backgroundColor: "#F0FDF4", color: "#16A34A", border: "1px solid #BBF7D0" }}
+                      >
+                        {subiendoInforme ? "Subiendo…" : "Subir al repositorio"}
+                      </button>
+                    </>
                   )}
                 </div>
 
