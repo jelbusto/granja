@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 60;
@@ -6,9 +6,9 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY no configurada en el servidor." },
-      { status: 500 }
+    return new Response(
+      JSON.stringify({ error: "ANTHROPIC_API_KEY no configurada en el servidor." }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 
@@ -18,7 +18,10 @@ export async function POST(req: NextRequest) {
     await req.json();
 
   if (!transcripcion?.trim()) {
-    return NextResponse.json({ error: "Transcripción vacía" }, { status: 400 });
+    return new Response(JSON.stringify({ error: "Transcripción vacía" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   const prompt = `Eres un veterinario redactando un informe oficial de visita a una explotación ganadera de ganado lechero.
@@ -45,27 +48,45 @@ Redacta el informe con las siguientes secciones claramente delimitadas:
 
 Usa lenguaje técnico-veterinario formal. Si la transcripción no menciona alguna sección, indícalo brevemente.`;
 
-  try {
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2048,
-      messages: [{ role: "user", content: prompt }],
-    });
+  // Stream the response so Vercel doesn't time out on slow responses
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const anthropicStream = await client.messages.stream({
+          model: "claude-sonnet-4-6",
+          max_tokens: 2048,
+          messages: [{ role: "user", content: prompt }],
+        });
 
-    const text = message.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b as { type: "text"; text: string }).text)
-      .join("\n");
+        let fullText = "";
+        for await (const chunk of anthropicStream) {
+          if (
+            chunk.type === "content_block_delta" &&
+            chunk.delta.type === "text_delta"
+          ) {
+            fullText += chunk.delta.text;
+          }
+        }
 
-    return NextResponse.json({ informe: text });
-  } catch (err: unknown) {
-    let msg = err instanceof Error ? err.message : String(err);
-    // Surface Anthropic API error details if present
-    if (err && typeof err === "object" && "status" in err) {
-      const ae = err as { status: number; message?: string };
-      msg = `Anthropic ${ae.status}: ${ae.message ?? msg}`;
-    }
-    console.error("[generar-informe]", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
+        controller.enqueue(encoder.encode(JSON.stringify({ informe: fullText })));
+      } catch (err: unknown) {
+        let msg = err instanceof Error ? err.message : String(err);
+        if (err && typeof err === "object" && "status" in err) {
+          const ae = err as { status: number; message?: string };
+          msg = `Anthropic ${ae.status}: ${ae.message ?? msg}`;
+        }
+        console.error("[generar-informe]", msg);
+        controller.enqueue(
+          encoder.encode(JSON.stringify({ error: msg }))
+        );
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: { "Content-Type": "application/json" },
+  });
 }

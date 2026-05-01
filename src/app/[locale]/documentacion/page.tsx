@@ -329,14 +329,17 @@ export default function DocumentacionPage() {
         body: JSON.stringify({ transcripcion, granja: granjaNombre, fechaVisita, veterinario, observaciones }),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(body.error ?? res.statusText);
+        const raw = await res.text().catch(() => "");
+        let msg = `HTTP ${res.status}`;
+        try { msg += `: ${(JSON.parse(raw) as { error?: string }).error ?? raw}`; }
+        catch { msg += raw ? `: ${raw.slice(0, 200)}` : ""; }
+        throw new Error(msg || `HTTP ${res.status}`);
       }
       const data = await res.json();
       setInformeGenerado(data.informe);
       setVoiceMsg({ ok: true, text: "Informe generado correctamente." });
     } catch (err) {
-      setVoiceMsg({ ok: false, text: `Error: ${err instanceof Error ? err.message : String(err)}` });
+      setVoiceMsg({ ok: false, text: err instanceof Error ? err.message : String(err) });
     }
     setGenerando(false);
   }
