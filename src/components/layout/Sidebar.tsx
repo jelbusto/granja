@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { usePathname, Link, useRouter } from "@/lib/i18n/routing";
 import type { SVGProps } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -66,6 +66,7 @@ function SidebarLogo() {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const locale = useLocale();
   const t = useTranslations("nav");
   const router = useRouter();
   const supabase = useRef(createClient()).current;
@@ -80,9 +81,15 @@ export function Sidebar() {
 
       const { data: perfil } = await (supabase
         .from("usuarios_perfil" as never)
-        .select("nombre, apellidos, id_tipo_usuario")
+        .select("nombre, apellidos, id_tipo_usuario, idioma")
         .eq("id", user.id)
-        .single()) as { data: { nombre: string; apellidos: string | null; id_tipo_usuario: string | null } | null; error: unknown };
+        .single()) as { data: { nombre: string; apellidos: string | null; id_tipo_usuario: string | null; idioma: string | null } | null; error: unknown };
+
+      // Apply saved locale (cross-device sync)
+      if (perfil?.idioma && perfil.idioma !== locale) {
+        router.replace(pathname, { locale: perfil.idioma });
+        return;
+      }
 
       setUserName(
         perfil

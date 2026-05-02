@@ -1,17 +1,32 @@
 "use client";
 
+import { useRef } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { usePathname, useRouter } from "@/lib/i18n/routing";
 import { locales, localeNames } from "@/lib/i18n/config";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { THEMES, THEME_HEX, type Theme } from "@/lib/theme";
+import { createClient } from "@/lib/supabase/client";
 
 export default function ConfiguracionPage() {
+  const supabase = useRef(createClient()).current;
   const t = useTranslations("configuracion");
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+
+  async function changeLocale(loc: string) {
+    // Save to DB
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await (supabase
+        .from("usuarios_perfil" as never)
+        .update({ idioma: loc } as never)
+        .eq("id", user.id));
+    }
+    router.replace(pathname, { locale: loc });
+  }
 
   return (
     <div className="p-4 sm:p-8 max-w-2xl">
@@ -26,7 +41,7 @@ export default function ConfiguracionPage() {
           {locales.map((loc) => (
             <button
               key={loc}
-              onClick={() => router.replace(pathname, { locale: loc })}
+              onClick={() => changeLocale(loc)}
               className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
                 locale === loc
                   ? "border-accent bg-accent text-white"
