@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { PencilIcon, PlusIcon, TrashIcon } from "@/components/ui/Icons";
+import { PlusIcon, TrashIcon } from "@/components/ui/Icons";
 
 type TipoUsuario = { id: string; nombre: string; es_trabajador: boolean };
-type Granja = { id: string; nombre: string };
+type Granja      = { id: string; nombre: string };
+type AdminUser   = { id: string; nombre: string; apellidos: string | null };
 
 type Usuario = {
   id: string;
@@ -16,6 +17,7 @@ type Usuario = {
   n_colegiado: string | null;
   id_tipo_usuario: string | null;
   id_granja: string | null;
+  id_aprobador: string | null;
   activo: boolean;
   tipos_usuario: { nombre: string } | null;
   granjas: { nombre: string } | null;
@@ -35,32 +37,34 @@ export default function UsuariosPage() {
   const supabase = useRef(createClient()).current;
 
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [tipos, setTipos] = useState<TipoUsuario[]>([]);
-  const [granjas, setGranjas] = useState<Granja[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tipos, setTipos]       = useState<TipoUsuario[]>([]);
+  const [granjas, setGranjas]   = useState<Granja[]>([]);
+  const [admins, setAdmins]     = useState<AdminUser[]>([]);
+  const [loading, setLoading]   = useState(true);
 
-  const [editId, setEditId] = useState<string | null>(null);
+  const [editId, setEditId]     = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [isNew, setIsNew] = useState(false);
+  const [isNew, setIsNew]       = useState(false);
 
-  const [nombre, setNombre] = useState("");
-  const [apellidos, setApellidos] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [telefono, setTelefono] = useState("");
+  const [nombre, setNombre]         = useState("");
+  const [apellidos, setApellidos]   = useState("");
+  const [email, setEmail]           = useState("");
+  const [password, setPassword]     = useState("");
+  const [telefono, setTelefono]     = useState("");
   const [nColegiado, setNColegiado] = useState("");
-  const [idTipo, setIdTipo] = useState("");
-  const [idGranja, setIdGranja] = useState("");
-  const [activo, setActivo] = useState(true);
+  const [idTipo, setIdTipo]         = useState("");
+  const [idGranja, setIdGranja]     = useState("");
+  const [idAprobador, setIdAprobador] = useState("");
+  const [activo, setActivo]         = useState(true);
 
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [saving, setSaving]               = useState(false);
+  const [msg, setMsg]                     = useState<{ ok: boolean; text: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     type R<T> = Promise<{ data: T | null }>;
-    const [{ data: u }, { data: t }, { data: g }] = await Promise.all([
+    const [{ data: u }, { data: t }, { data: g }, { data: adm }] = await Promise.all([
       supabase.from("usuarios_perfil" as never)
         .select("*, tipos_usuario(nombre), granjas(nombre)")
         .order("nombre") as unknown as R<Usuario[]>,
@@ -72,19 +76,29 @@ export default function UsuariosPage() {
         .select("id, nombre")
         .eq("activo", true)
         .order("nombre") as unknown as R<Granja[]>,
+      supabase.from("usuarios_perfil" as never)
+        .select("id, nombre, apellidos, tipos_usuario!inner(nombre)")
+        .eq("activo", true)
+        .eq("tipos_usuario.nombre", "Admin")
+        .order("nombre") as unknown as R<AdminUser[]>,
     ]);
     setUsuarios(u ?? []);
     setTipos(t ?? []);
     setGranjas(g ?? []);
+    setAdmins(adm ?? []);
     setLoading(false);
   }, [supabase]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const tipoSeleccionado = tipos.find((t) => t.id === idTipo);
+  const esTrabajador     = tipoSeleccionado?.es_trabajador ?? true;
+
   function openNew() {
     setIsNew(true); setEditId(null);
     setNombre(""); setApellidos(""); setEmail(""); setPassword("");
-    setTelefono(""); setNColegiado(""); setIdTipo(""); setIdGranja(""); setActivo(true);
+    setTelefono(""); setNColegiado(""); setIdTipo(""); setIdGranja("");
+    setIdAprobador(""); setActivo(true);
     setMsg(null); setShowForm(true);
   }
 
@@ -92,17 +106,14 @@ export default function UsuariosPage() {
     setIsNew(false); setEditId(u.id);
     setNombre(u.nombre); setApellidos(u.apellidos ?? ""); setEmail(u.email ?? "");
     setPassword(""); setTelefono(u.telefono ?? ""); setNColegiado(u.n_colegiado ?? "");
-    setIdTipo(u.id_tipo_usuario ?? ""); setIdGranja(u.id_granja ?? ""); setActivo(u.activo);
+    setIdTipo(u.id_tipo_usuario ?? ""); setIdGranja(u.id_granja ?? "");
+    setIdAprobador(u.id_aprobador ?? ""); setActivo(u.activo);
     setMsg(null); setShowForm(true);
   }
 
-  // Determinar si el tipo seleccionado es trabajador
-  const tipoSeleccionado = tipos.find((t) => t.id === idTipo);
-  const esTrabajador = tipoSeleccionado?.es_trabajador ?? true;
-
   async function handleSave() {
     if (!nombre.trim()) { setMsg({ ok: false, text: "El nombre es obligatorio." }); return; }
-    if (isNew && !email.trim()) { setMsg({ ok: false, text: "El email es obligatorio." }); return; }
+    if (isNew && !email.trim())    { setMsg({ ok: false, text: "El email es obligatorio." }); return; }
     if (isNew && !password.trim()) { setMsg({ ok: false, text: "La contraseña es obligatoria." }); return; }
     setSaving(true); setMsg(null);
 
@@ -110,7 +121,6 @@ export default function UsuariosPage() {
       let userId = editId;
 
       if (isNew) {
-        // Crear usuario en auth via API route
         const res = await fetch("/api/admin/crear-usuario", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -124,18 +134,18 @@ export default function UsuariosPage() {
         userId = created.id;
       }
 
-      // Upsert perfil
       const { error: profileError } = await (supabase
         .from("usuarios_perfil" as never)
         .upsert({
           id: userId,
           nombre: nombre.trim(),
-          apellidos: apellidos.trim() || null,
-          email: email.trim() || null,
-          telefono: telefono.trim() || null,
-          n_colegiado: nColegiado.trim() || null,
-          id_tipo_usuario: idTipo || null,
-          id_granja: (!esTrabajador && idGranja) ? idGranja : null,
+          apellidos:    apellidos.trim()   || null,
+          email:        email.trim()       || null,
+          telefono:     telefono.trim()    || null,
+          n_colegiado:  nColegiado.trim()  || null,
+          id_tipo_usuario: idTipo          || null,
+          id_granja:    (!esTrabajador && idGranja) ? idGranja : null,
+          id_aprobador: (esTrabajador && idAprobador) ? idAprobador : null,
           activo,
         } as never)) as unknown as { error: { message: string } | null };
 
@@ -150,7 +160,6 @@ export default function UsuariosPage() {
   }
 
   async function handleDelete(id: string) {
-    // Eliminar perfil (auth user se eliminaría via API en producción)
     await (supabase.from("usuarios_perfil" as never).delete().eq("id", id));
     setDeleteConfirm(null);
     if (editId === id) { setShowForm(false); setEditId(null); }
@@ -249,6 +258,8 @@ export default function UsuariosPage() {
                   {tipos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
                 </select>
               </div>
+
+              {/* Granja: solo para no-trabajadores (clientes) */}
               {!esTrabajador && idTipo && (
                 <div>
                   <FieldLabel>Granja asignada</FieldLabel>
@@ -258,6 +269,21 @@ export default function UsuariosPage() {
                   </select>
                 </div>
               )}
+
+              {/* Aprobador: solo para trabajadores */}
+              {esTrabajador && idTipo && (
+                <div>
+                  <FieldLabel>Aprobador de gastos</FieldLabel>
+                  <select value={idAprobador} onChange={(e) => setIdAprobador(e.target.value)} className={INPUT_CLS}>
+                    <option value="">— Sin aprobador —</option>
+                    {admins.map((a) => (
+                      <option key={a.id} value={a.id}>{a.nombre} {a.apellidos ?? ""}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs" style={{ color: "#888780" }}>Solo admins pueden aprobar gastos</p>
+                </div>
+              )}
+
               <div className="flex items-center gap-2 pt-5">
                 <input type="checkbox" id="activo" checked={activo} onChange={(e) => setActivo(e.target.checked)} className="rounded" />
                 <label htmlFor="activo" className="text-sm text-gray-700 cursor-pointer">Usuario activo</label>

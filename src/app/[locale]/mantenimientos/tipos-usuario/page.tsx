@@ -25,12 +25,12 @@ const RUTAS: { ruta: string; label: string; grupo?: string }[] = [
   { ruta: "economico",                     label: "Datos Económicos" },
   { ruta: "carga_datos",                   label: "Carga de Datos" },
   { ruta: "documentacion",                 label: "Documentación" },
+  { ruta: "empleados",                     label: "Empleados (grupo)",     grupo: "empleados" },
+  { ruta: "empleados/gastos_viaje",        label: "→ Gastos de Viaje",     grupo: "empleados" },
   { ruta: "mantenimientos",                label: "Mantenimientos (grupo)", grupo: "mantenimientos" },
   { ruta: "mantenimientos/granjas",        label: "→ Granjas",             grupo: "mantenimientos" },
   { ruta: "mantenimientos/tipos_usuario",  label: "→ Tipos de Usuario",    grupo: "mantenimientos" },
   { ruta: "mantenimientos/usuarios",       label: "→ Usuarios",            grupo: "mantenimientos" },
-  { ruta: "mantenimientos/empleados",      label: "→ Empleados",           grupo: "mantenimientos" },
-  { ruta: "gastos_viaje",                  label: "Gastos de Viaje" },
   { ruta: "configuracion",                 label: "Configuración" },
 ];
 

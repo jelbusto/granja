@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { PlusIcon, TrashIcon, CheckCircleIcon } from "@/components/ui/Icons";
 
-type Empleado = { id: string; nombre: string; apellidos: string | null };
+type Trabajador = { id: string; nombre: string; apellidos: string | null };
 
 type Gasto = {
   id: string;
@@ -22,23 +22,21 @@ type Gasto = {
   id_aprobador: string | null;
   fecha_aprobacion: string | null;
   comentario_rechazo: string | null;
-  empleados: { nombre: string; apellidos: string | null } | null;
+  empleado: { nombre: string; apellidos: string | null } | null;
 };
 
-type CurrentUser = { id: string; id_tipo_usuario: string | null; tipo_nombre: string | null };
-
 const TIPOS = [
-  { value: "comida",      label: "Comida",      iva: 10 },
-  { value: "kilometros",  label: "Kilómetros",  iva: 0 },
-  { value: "billetes",    label: "Billetes",    iva: 10 },
-  { value: "hotel",       label: "Hotel",       iva: 10 },
-  { value: "otros",       label: "Otros",       iva: 21 },
+  { value: "comida",     label: "Comida",     iva: 10 },
+  { value: "kilometros", label: "Kilómetros", iva: 0  },
+  { value: "billetes",   label: "Billetes",   iva: 10 },
+  { value: "hotel",      label: "Hotel",      iva: 10 },
+  { value: "otros",      label: "Otros",      iva: 21 },
 ];
 
 const ESTADO_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  pendiente:  { bg: "#FEF9C3", text: "#92400E", label: "Pendiente" },
-  aprobado:   { bg: "#ECFDF5", text: "#3B6D11", label: "Aprobado" },
-  rechazado:  { bg: "#FEF2F2", text: "#A32D2D", label: "Rechazado" },
+  pendiente: { bg: "#FEF9C3", text: "#92400E", label: "Pendiente" },
+  aprobado:  { bg: "#ECFDF5", text: "#3B6D11", label: "Aprobado"  },
+  rechazado: { bg: "#FEF2F2", text: "#A32D2D", label: "Rechazado" },
 };
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -53,49 +51,46 @@ const INPUT_CLS = "w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg
 
 function calcIva(total: number, pct: number) {
   const sinIva = total / (1 + pct / 100);
-  const iva = total - sinIva;
-  return { sinIva: Math.round(sinIva * 100) / 100, iva: Math.round(iva * 100) / 100 };
+  return {
+    sinIva: Math.round(sinIva * 100) / 100,
+    iva:    Math.round((total - sinIva) * 100) / 100,
+  };
 }
 
 export default function GastosViajePage() {
   const supabase = useRef(createClient()).current;
 
-  const [gastos, setGastos] = useState<Gasto[]>([]);
-  const [empleados, setEmpleados] = useState<Empleado[]>([]);
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [gastos, setGastos]           = useState<Gasto[]>([]);
+  const [trabajadores, setTrabajadores] = useState<Trabajador[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin]         = useState(false);
+  const [loading, setLoading]         = useState(true);
 
-  const [editId, setEditId] = useState<string | null>(null);
+  const [editId, setEditId]     = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [isNew, setIsNew] = useState(false);
+  const [isNew, setIsNew]       = useState(false);
 
-  // Form fields
-  const [idEmpleado, setIdEmpleado] = useState("");
-  const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
-  const [tipo, setTipo] = useState("comida");
-  const [descripcion, setDescripcion] = useState("");
-  const [lugar, setLugar] = useState("");
+  const [idEmpleado, setIdEmpleado]     = useState("");
+  const [fecha, setFecha]               = useState(new Date().toISOString().split("T")[0]);
+  const [tipo, setTipo]                 = useState("comida");
+  const [descripcion, setDescripcion]   = useState("");
+  const [lugar, setLugar]               = useState("");
   const [importeTotal, setImporteTotal] = useState("");
   const [porcentajeIva, setPorcentajeIva] = useState("10");
-  const [fotoFile, setFotoFile] = useState<File | null>(null);
-  const [fotoPreview, setFotoPreview] = useState<string | null>(null);
-  const [fotoPath, setFotoPath] = useState<string | null>(null);
+  const [fotoFile, setFotoFile]         = useState<File | null>(null);
+  const [fotoPreview, setFotoPreview]   = useState<string | null>(null);
+  const [fotoPath, setFotoPath]         = useState<string | null>(null);
 
-  // OCR state
-  const [recognizing, setRecognizing] = useState(false);
-  const [ocrMsg, setOcrMsg] = useState<string | null>(null);
+  const [recognizing, setRecognizing]   = useState(false);
+  const [ocrMsg, setOcrMsg]             = useState<string | null>(null);
 
-  // Approval
   const [comentarioRechazo, setComentarioRechazo] = useState("");
-  const [showRejectInput, setShowRejectInput] = useState<string | null>(null);
+  const [showRejectInput, setShowRejectInput]     = useState<string | null>(null);
 
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [saving, setSaving]             = useState(false);
+  const [msg, setMsg]                   = useState<{ ok: boolean; text: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-
-  // Filter
-  const [filterEstado, setFilterEstado] = useState<string>("todos");
+  const [filterEstado, setFilterEstado] = useState("todos");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -103,32 +98,38 @@ export default function GastosViajePage() {
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
+    setCurrentUserId(user.id);
 
     const { data: perfil } = await (supabase
       .from("usuarios_perfil" as never)
-      .select("id, id_tipo_usuario, tipos_usuario(nombre)")
+      .select("id_tipo_usuario, tipos_usuario(nombre)")
       .eq("id", user.id)
-      .single()) as { data: { id: string; id_tipo_usuario: string | null; tipos_usuario: { nombre: string } | null } | null; error: unknown };
+      .single()) as { data: { id_tipo_usuario: string | null; tipos_usuario: { nombre: string } | null } | null; error: unknown };
 
     const tipoNombre = (perfil as { tipos_usuario?: { nombre?: string } | null } | null)?.tipos_usuario?.nombre ?? null;
     const admin = tipoNombre === "Admin";
     setIsAdmin(admin);
-    setCurrentUser({ id: user.id, id_tipo_usuario: perfil?.id_tipo_usuario ?? null, tipo_nombre: tipoNombre });
 
-    const [{ data: g }, { data: emp }] = await Promise.all([
+    // Trabajadores = usuarios con tipo es_trabajador = true
+    const { data: todosUsuarios } = await (supabase
+      .from("usuarios_perfil" as never)
+      .select("id, nombre, apellidos, activo, tipos_usuario(es_trabajador)")
+      .eq("activo", true)
+      .order("nombre")) as { data: (Trabajador & { tipos_usuario: { es_trabajador: boolean } | null })[] | null; error: unknown };
+
+    const trabajadoresFiltrados = (todosUsuarios ?? []).filter(
+      (u) => (u as { tipos_usuario?: { es_trabajador?: boolean } | null }).tipos_usuario?.es_trabajador === true
+    );
+    setTrabajadores(trabajadoresFiltrados);
+
+    const [{ data: g }] = await Promise.all([
       supabase
         .from("gastos_viaje" as never)
-        .select("*, empleados(nombre, apellidos)")
+        .select("*, empleado:id_empleado(nombre, apellidos)")
         .order("fecha", { ascending: false }) as unknown as R<Gasto[]>,
-      supabase
-        .from("empleados" as never)
-        .select("id, nombre, apellidos")
-        .eq("activo", true)
-        .order("nombre") as unknown as R<Empleado[]>,
     ]);
 
     setGastos(g ?? []);
-    setEmpleados(emp ?? []);
     setLoading(false);
   }, [supabase]);
 
@@ -145,6 +146,9 @@ export default function GastosViajePage() {
   function openNew() {
     setIsNew(true); setEditId(null);
     resetForm();
+    // Pre-select current user if they are a trabajador
+    const meAsTrabajador = trabajadores.find((t) => t.id === currentUserId);
+    if (meAsTrabajador) setIdEmpleado(meAsTrabajador.id);
     setShowForm(true);
   }
 
@@ -176,7 +180,6 @@ export default function GastosViajePage() {
     if (!fotoFile) return;
     setRecognizing(true);
     setOcrMsg("Reconociendo con IA…");
-
     try {
       const reader = new FileReader();
       const base64 = await new Promise<string>((resolve, reject) => {
@@ -184,77 +187,65 @@ export default function GastosViajePage() {
         reader.onerror = reject;
         reader.readAsDataURL(fotoFile);
       });
-
       const res = await fetch("/api/reconocer-factura", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ base64, mimeType: fotoFile.type }),
       });
-
       if (!res.ok) throw new Error("Error al reconocer la factura");
       const data = await res.json() as {
         fecha?: string; tipo?: string; descripcion?: string;
         lugar?: string; importe_total?: number;
       };
-
       if (data.fecha) setFecha(data.fecha);
-      if (data.tipo && TIPOS.some((t) => t.value === data.tipo)) {
-        handleTipoChange(data.tipo);
-      }
+      if (data.tipo && TIPOS.some((t) => t.value === data.tipo)) handleTipoChange(data.tipo);
       if (data.descripcion) setDescripcion(data.descripcion);
       if (data.lugar) setLugar(data.lugar);
       if (data.importe_total != null) setImporteTotal(String(data.importe_total));
-
-      setOcrMsg("Campos extraídos correctamente. Revisa y ajusta si es necesario.");
+      setOcrMsg("Campos extraídos. Revisa y ajusta si es necesario.");
     } catch (err) {
-      setOcrMsg(err instanceof Error ? err.message : "Error al reconocer la factura");
+      setOcrMsg(err instanceof Error ? err.message : "Error al reconocer");
     }
     setRecognizing(false);
   }
 
   async function handleSave() {
     if (!idEmpleado) { setMsg({ ok: false, text: "Selecciona un empleado." }); return; }
-    if (!fecha) { setMsg({ ok: false, text: "La fecha es obligatoria." }); return; }
+    if (!fecha)      { setMsg({ ok: false, text: "La fecha es obligatoria." }); return; }
     const total = parseFloat(importeTotal);
     if (isNaN(total) || total <= 0) { setMsg({ ok: false, text: "El importe debe ser mayor que 0." }); return; }
-
     setSaving(true); setMsg(null);
 
     try {
       let uploadedPath = fotoPath;
-
       if (fotoFile) {
         const ext = fotoFile.name.split(".").pop() ?? "jpg";
-        const fileName = `${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage
+        const { error: upErr } = await supabase.storage
           .from("gastos-viaje")
-          .upload(fileName, fotoFile, { upsert: true });
-        if (uploadError) throw new Error(`Error subiendo foto: ${uploadError.message}`);
-        uploadedPath = fileName;
+          .upload(`${Date.now()}.${ext}`, fotoFile, { upsert: true });
+        if (upErr) throw new Error(`Error subiendo foto: ${upErr.message}`);
+        uploadedPath = `${Date.now()}.${ext}`;
       }
 
       const pct = parseFloat(porcentajeIva) || 0;
       const { sinIva, iva } = calcIva(total, pct);
-
-      // Admin gastos are auto-approved
       const estadoInicial = isAdmin ? "aprobado" : "pendiente";
-      const aprobadorId = isAdmin ? (currentUser?.id ?? null) : null;
-      const fechaAprobacion = isAdmin ? new Date().toISOString() : null;
+      const aprobadorId   = isAdmin ? currentUserId : null;
+      const fechaAprobado = isAdmin ? new Date().toISOString() : null;
 
       const payload = {
-        id_empleado: idEmpleado,
-        fecha,
-        tipo,
-        descripcion: descripcion.trim() || null,
-        lugar: lugar.trim() || null,
-        importe_total: total,
-        porcentaje_iva: pct,
+        id_empleado:     idEmpleado,
+        fecha, tipo,
+        descripcion:     descripcion.trim() || null,
+        lugar:           lugar.trim() || null,
+        importe_total:   total,
+        porcentaje_iva:  pct,
         importe_sin_iva: sinIva,
-        importe_iva: iva,
-        foto_path: uploadedPath,
-        estado: estadoInicial,
-        id_aprobador: aprobadorId,
-        fecha_aprobacion: fechaAprobacion,
+        importe_iva:     iva,
+        foto_path:       uploadedPath,
+        estado:          estadoInicial,
+        id_aprobador:    aprobadorId,
+        fecha_aprobacion: fechaAprobado,
       };
 
       if (isNew) {
@@ -263,9 +254,12 @@ export default function GastosViajePage() {
           .insert(payload as never)) as unknown as { error: { message: string } | null };
         if (error) throw new Error(error.message);
       } else {
+        // Don't overwrite approval fields on edit
+        const { estado: _e, id_aprobador: _a, fecha_aprobacion: _f, ...editPayload } = payload;
+        void _e; void _a; void _f;
         const { error } = await (supabase
           .from("gastos_viaje" as never)
-          .update({ ...payload, estado: undefined, id_aprobador: undefined, fecha_aprobacion: undefined } as never)
+          .update(editPayload as never)
           .eq("id", editId!)) as unknown as { error: { message: string } | null };
         if (error) throw new Error(error.message);
       }
@@ -279,29 +273,29 @@ export default function GastosViajePage() {
   }
 
   async function handleApprove(id: string) {
-    const { error } = await (supabase
+    await (supabase
       .from("gastos_viaje" as never)
       .update({
         estado: "aprobado",
-        id_aprobador: currentUser?.id,
+        id_aprobador: currentUserId,
         fecha_aprobacion: new Date().toISOString(),
         comentario_rechazo: null,
       } as never)
-      .eq("id", id)) as unknown as { error: { message: string } | null };
-    if (!error) loadData();
+      .eq("id", id)) as unknown as { error: unknown };
+    loadData();
   }
 
   async function handleReject(id: string) {
-    const { error } = await (supabase
+    await (supabase
       .from("gastos_viaje" as never)
       .update({
         estado: "rechazado",
-        id_aprobador: currentUser?.id,
+        id_aprobador: currentUserId,
         fecha_aprobacion: new Date().toISOString(),
         comentario_rechazo: comentarioRechazo.trim() || null,
       } as never)
-      .eq("id", id)) as unknown as { error: { message: string } | null };
-    if (!error) { setShowRejectInput(null); setComentarioRechazo(""); loadData(); }
+      .eq("id", id)) as unknown as { error: unknown };
+    setShowRejectInput(null); setComentarioRechazo(""); loadData();
   }
 
   async function handleDelete(id: string) {
@@ -313,10 +307,11 @@ export default function GastosViajePage() {
 
   const filtered = gastos.filter((g) => filterEstado === "todos" || g.estado === filterEstado);
   const totalPendiente = gastos.filter((g) => g.estado === "pendiente").reduce((s, g) => s + g.importe_total, 0);
-
-  const pct = parseFloat(porcentajeIva) || 0;
-  const total = parseFloat(importeTotal) || 0;
+  const pct   = parseFloat(porcentajeIva) || 0;
+  const total = parseFloat(importeTotal)  || 0;
   const { sinIva, iva } = calcIva(total, pct);
+
+  const currentGasto = gastos.find((x) => x.id === editId);
 
   return (
     <div className="p-8 bg-white min-h-screen max-w-7xl">
@@ -339,11 +334,12 @@ export default function GastosViajePage() {
             <PlusIcon className="h-4 w-4" /> Nuevo gasto
           </button>
 
-          {/* Filter */}
           <div className="flex gap-1 mb-3">
             {["todos", "pendiente", "aprobado", "rechazado"].map((e) => (
               <button key={e} onClick={() => setFilterEstado(e)}
-                className={`flex-1 py-1 rounded text-xs font-medium transition-colors ${filterEstado === e ? "bg-accent text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+                className={`flex-1 py-1 rounded text-xs font-medium transition-colors ${
+                  filterEstado === e ? "bg-accent text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                }`}>
                 {e === "todos" ? "Todos" : ESTADO_COLORS[e]?.label}
               </button>
             ))}
@@ -364,7 +360,7 @@ export default function GastosViajePage() {
                         editId === g.id ? "bg-accent text-white" : "hover:bg-gray-50 text-gray-700"
                       }`}>
                       <div className="flex items-center justify-between">
-                        <span className="font-medium truncate">{g.empleados?.nombre} {g.empleados?.apellidos}</span>
+                        <span className="font-medium truncate">{g.empleado?.nombre} {g.empleado?.apellidos}</span>
                         <span className="text-xs font-medium ml-1 flex-shrink-0">{g.importe_total.toFixed(2)} €</span>
                       </div>
                       <div className="flex items-center justify-between mt-0.5">
@@ -384,7 +380,7 @@ export default function GastosViajePage() {
           )}
         </div>
 
-        {/* Formulario / Detalle */}
+        {/* Formulario */}
         {showForm && (
           <div className="flex-1 bg-white rounded-xl p-6" style={{ border: "1px solid #e5e5e5" }}>
             <div className="flex items-center justify-between mb-6">
@@ -415,26 +411,22 @@ export default function GastosViajePage() {
                   {ocrMsg && (
                     <p className="mt-1.5 text-xs" style={{ color: ocrMsg.includes("Error") ? "#A32D2D" : "#3B6D11" }}>{ocrMsg}</p>
                   )}
+                  {fotoFile && (
+                    <button onClick={handleRecognize} disabled={recognizing}
+                      className="mt-2 px-4 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-50"
+                      style={{ backgroundColor: "var(--accent)" }}>
+                      {recognizing ? "Reconociendo…" : "Reconocer con IA"}
+                    </button>
+                  )}
                 </div>
-                {fotoPreview ? (
-                  <img src={fotoPreview} alt="Factura" className="h-24 w-24 object-cover rounded-lg border border-gray-200 flex-shrink-0" />
-                ) : fotoPath ? (
-                  <div className="h-24 w-24 rounded-lg border border-gray-200 flex-shrink-0 overflow-hidden">
-                    <img
-                      src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/gastos-viaje/${fotoPath}`}
-                      alt="Factura"
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                ) : null}
+                {(fotoPreview || fotoPath) && (
+                  <img
+                    src={fotoPreview ?? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/gastos-viaje/${fotoPath}`}
+                    alt="Factura"
+                    className="h-24 w-24 object-cover rounded-lg border border-gray-200 flex-shrink-0"
+                  />
+                )}
               </div>
-              {fotoFile && (
-                <button onClick={handleRecognize} disabled={recognizing}
-                  className="mt-2 px-4 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-50"
-                  style={{ backgroundColor: "var(--accent)" }}>
-                  {recognizing ? "Reconociendo…" : "Reconocer con IA"}
-                </button>
-              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
@@ -442,8 +434,8 @@ export default function GastosViajePage() {
                 <FieldLabel>Empleado *</FieldLabel>
                 <select value={idEmpleado} onChange={(e) => setIdEmpleado(e.target.value)} className={INPUT_CLS}>
                   <option value="">— Seleccionar —</option>
-                  {empleados.map((e) => (
-                    <option key={e.id} value={e.id}>{e.nombre} {e.apellidos ?? ""}</option>
+                  {trabajadores.map((t) => (
+                    <option key={t.id} value={t.id}>{t.nombre} {t.apellidos ?? ""}</option>
                   ))}
                 </select>
               </div>
@@ -477,7 +469,6 @@ export default function GastosViajePage() {
               </div>
             </div>
 
-            {/* IVA breakdown */}
             {total > 0 && (
               <div className="mb-5 rounded-lg p-3 grid grid-cols-3 gap-3 text-center text-sm" style={{ backgroundColor: "#f8f7f4" }}>
                 <div>
@@ -514,60 +505,49 @@ export default function GastosViajePage() {
               </button>
             </div>
 
-            {/* Approval section — admin only, pendiente gastos */}
-            {isAdmin && !isNew && editId && (() => {
-              const g = gastos.find((x) => x.id === editId);
-              if (!g || g.estado !== "pendiente") return null;
-              return (
-                <div className="mt-6 pt-5 border-t border-gray-100">
-                  <p className="text-sm font-medium text-gray-700 mb-3">Aprobación</p>
-                  <div className="flex gap-3 flex-wrap">
-                    <button onClick={() => handleApprove(editId)}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
-                      style={{ backgroundColor: "#3B6D11" }}>
-                      <CheckCircleIcon className="h-4 w-4" /> Aprobar
-                    </button>
-                    {showRejectInput === editId ? (
-                      <div className="flex gap-2 items-center flex-1">
-                        <input
-                          type="text"
-                          value={comentarioRechazo}
-                          onChange={(e) => setComentarioRechazo(e.target.value)}
-                          placeholder="Motivo del rechazo (opcional)"
-                          className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
-                        />
-                        <button onClick={() => handleReject(editId)}
-                          className="px-3 py-2 rounded-lg text-sm font-medium text-white"
-                          style={{ backgroundColor: "#A32D2D" }}>
-                          Confirmar
-                        </button>
-                        <button onClick={() => setShowRejectInput(null)}
-                          className="px-3 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">
-                          Cancelar
-                        </button>
-                      </div>
-                    ) : (
-                      <button onClick={() => setShowRejectInput(editId)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium border"
-                        style={{ borderColor: "#A32D2D", color: "#A32D2D" }}>
-                        Rechazar
+            {/* Aprobación — solo admin, solo gastos pendientes */}
+            {isAdmin && !isNew && currentGasto?.estado === "pendiente" && (
+              <div className="mt-6 pt-5 border-t border-gray-100">
+                <p className="text-sm font-medium text-gray-700 mb-3">Aprobación</p>
+                <div className="flex gap-3 flex-wrap items-center">
+                  <button onClick={() => handleApprove(editId!)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
+                    style={{ backgroundColor: "#3B6D11" }}>
+                    <CheckCircleIcon className="h-4 w-4" /> Aprobar
+                  </button>
+                  {showRejectInput === editId ? (
+                    <div className="flex gap-2 items-center flex-1">
+                      <input type="text" value={comentarioRechazo}
+                        onChange={(e) => setComentarioRechazo(e.target.value)}
+                        placeholder="Motivo del rechazo (opcional)"
+                        className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent" />
+                      <button onClick={() => handleReject(editId!)}
+                        className="px-3 py-2 rounded-lg text-sm font-medium text-white"
+                        style={{ backgroundColor: "#A32D2D" }}>
+                        Confirmar
                       </button>
-                    )}
-                  </div>
+                      <button onClick={() => setShowRejectInput(null)}
+                        className="px-3 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setShowRejectInput(editId!)}
+                      className="px-4 py-2 rounded-lg text-sm font-medium border"
+                      style={{ borderColor: "#A32D2D", color: "#A32D2D" }}>
+                      Rechazar
+                    </button>
+                  )}
                 </div>
-              );
-            })()}
+              </div>
+            )}
 
-            {/* Show rejection comment if rechazado */}
-            {!isNew && editId && (() => {
-              const g = gastos.find((x) => x.id === editId);
-              if (!g || g.estado !== "rechazado" || !g.comentario_rechazo) return null;
-              return (
-                <div className="mt-4 rounded-lg px-4 py-3 text-sm" style={{ backgroundColor: "#FEF2F2", color: "#A32D2D" }}>
-                  Motivo de rechazo: {g.comentario_rechazo}
-                </div>
-              );
-            })()}
+            {/* Motivo de rechazo */}
+            {!isNew && currentGasto?.estado === "rechazado" && currentGasto.comentario_rechazo && (
+              <div className="mt-4 rounded-lg px-4 py-3 text-sm" style={{ backgroundColor: "#FEF2F2", color: "#A32D2D" }}>
+                Motivo de rechazo: {currentGasto.comentario_rechazo}
+              </div>
+            )}
           </div>
         )}
       </div>
