@@ -7,5 +7,8 @@
   "granjas": "Farms",
   "idioma": "Language",
   "documentacion": "Documentation",
-  "configuracion": "Settings"
+  "configuracion": "Settings",
+  "tipos_usuario": "User Types",
+  "usuarios": "Users",
+  "cerrar_sesion": "Sign out"
 }

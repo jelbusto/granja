@@ -7,5 +7,8 @@
   "granjas": "Granges",
   "idioma": "Idioma",
   "documentacion": "Documentació",
-  "configuracion": "Configuració"
+  "configuracion": "Configuració",
+  "tipos_usuario": "Tipus d'Usuari",
+  "usuarios": "Usuaris",
+  "cerrar_sesion": "Tancar sessió"
 }

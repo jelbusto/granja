@@ -5,8 +5,8 @@ import { updateSession } from "@/lib/supabase/middleware";
 
 const intlMiddleware = createMiddleware(routing);
 
-// Rutas que requieren autenticación (vacío = sin protección mientras se desarrolla el login)
-const PROTECTED_PATHS: string[] = [];
+// Rutas públicas (no requieren sesión)
+const PUBLIC_PATHS = ["/auth", "/"];
 
 // Rutas de autenticación (redirigen al dashboard si ya está autenticado)
 const AUTH_PATHS = ["/auth"];
@@ -29,7 +29,7 @@ export default async function middleware(request: NextRequest) {
 
   const { locale, pathWithoutLocale } = extractLocaleAndPath(pathname);
 
-  const isProtected = PROTECTED_PATHS.some((p) =>
+  const isPublic = PUBLIC_PATHS.some((p) =>
     pathWithoutLocale === p || pathWithoutLocale.startsWith(p + "/")
   );
   const isAuthPath = AUTH_PATHS.some((p) =>
@@ -37,7 +37,7 @@ export default async function middleware(request: NextRequest) {
   );
 
   // 2. Redirigir a /auth si intenta acceder a ruta protegida sin sesión
-  if (!user && isProtected) {
+  if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = `/${locale}/auth`;
     url.searchParams.set("next", pathname);
