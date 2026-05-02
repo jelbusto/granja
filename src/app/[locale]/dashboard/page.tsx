@@ -503,7 +503,7 @@ export default function DashboardPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-8 bg-white min-h-screen max-w-7xl">
+    <div className="p-4 sm:p-8 bg-white min-h-screen max-w-7xl">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">

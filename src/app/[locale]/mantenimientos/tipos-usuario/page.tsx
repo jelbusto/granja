@@ -158,13 +158,13 @@ export default function TiposUsuarioPage() {
   }
 
   return (
-    <div className="p-8 bg-white min-h-screen max-w-6xl">
+    <div className="p-4 sm:p-8 bg-white min-h-screen max-w-6xl">
       <h1 className="text-gray-900 mb-1" style={{ fontWeight: 500, fontSize: 22 }}>Tipos de Usuario</h1>
       <p className="mb-8" style={{ color: "#888780", fontSize: 13 }}>Define los roles y sus permisos de acceso a cada sección</p>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
         {/* Lista */}
-        <div className="w-64 flex-shrink-0">
+        <div className={`${showForm ? "hidden lg:block" : ""} w-full lg:w-64 lg:flex-shrink-0`}>
           <button
             onClick={openNew}
             className="w-full mb-3 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium text-white transition-colors"
@@ -205,11 +205,17 @@ export default function TiposUsuarioPage() {
 
         {/* Formulario */}
         {showForm && (
-          <div className="flex-1 bg-white rounded-xl p-6" style={{ border: "1px solid #e5e5e5" }}>
+          <div className="flex-1 min-w-0 bg-white rounded-xl p-4 sm:p-6" style={{ border: "1px solid #e5e5e5" }}>
             <div className="flex items-center justify-between mb-6">
-              <h2 style={{ fontWeight: 500, fontSize: 14 }} className="text-gray-800">
-                {editId ? "Editar tipo de usuario" : "Nuevo tipo de usuario"}
-              </h2>
+              <div className="flex items-center gap-3">
+                <button onClick={() => { setShowForm(false); setEditId(null); }}
+                  className="lg:hidden text-gray-400 hover:text-gray-600 -ml-1 p-1">
+                  ←
+                </button>
+                <h2 style={{ fontWeight: 500, fontSize: 14 }} className="text-gray-800">
+                  {editId ? "Editar tipo de usuario" : "Nuevo tipo de usuario"}
+                </h2>
+              </div>
               {editId && (
                 <div className="flex gap-2">
                   {deleteConfirm === editId ? (
@@ -264,7 +270,7 @@ export default function TiposUsuarioPage() {
             {/* Permisos */}
             <div className="mb-6">
               <FieldLabel>Permisos de acceso</FieldLabel>
-              <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #e5e5e5" }}>
+              <div className="rounded-xl overflow-x-auto" style={{ border: "1px solid #e5e5e5" }}>
                 <table className="w-full">
                   <thead>
                     <tr style={{ backgroundColor: "#f8f7f4" }}>

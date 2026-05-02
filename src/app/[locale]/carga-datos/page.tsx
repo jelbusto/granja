@@ -230,7 +230,7 @@ export default function CargaDatosPage() {
   const totalPages     = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <div className="p-8 bg-white min-h-screen max-w-7xl">
+    <div className="p-4 sm:p-8 bg-white min-h-screen max-w-7xl">
       <h1 style={{ fontWeight: 500, fontSize: 22 }} className="text-gray-900 mb-1">Datos diarios</h1>
       <p style={{ color: "#888780", fontSize: 13 }} className="mb-8">
         Visualización y carga de registros diarios de producción

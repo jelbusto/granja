@@ -314,20 +314,20 @@ export default function GastosViajePage() {
   const currentGasto = gastos.find((x) => x.id === editId);
 
   return (
-    <div className="p-8 bg-white min-h-screen max-w-7xl">
-      <div className="flex items-start justify-between mb-1">
+    <div className="p-4 sm:p-8 bg-white min-h-screen max-w-7xl">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-1">
         <h1 className="text-gray-900" style={{ fontWeight: 500, fontSize: 22 }}>Gastos de Viaje</h1>
         {isAdmin && totalPendiente > 0 && (
-          <div className="rounded-lg px-3 py-1.5 text-sm" style={{ backgroundColor: "#FEF9C3", color: "#92400E" }}>
-            Pendiente de aprobar: <strong>{totalPendiente.toFixed(2)} €</strong>
+          <div className="rounded-lg px-3 py-1.5 text-sm self-start" style={{ backgroundColor: "#FEF9C3", color: "#92400E" }}>
+            Pendiente: <strong>{totalPendiente.toFixed(2)} €</strong>
           </div>
         )}
       </div>
       <p className="mb-6" style={{ color: "#888780", fontSize: 13 }}>Registro y gestión de gastos de viaje</p>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
         {/* Lista */}
-        <div className="w-80 flex-shrink-0">
+        <div className={`${showForm ? "hidden lg:block" : ""} w-full lg:w-80 lg:flex-shrink-0`}>
           <button onClick={openNew}
             className="w-full mb-3 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium text-white"
             style={{ backgroundColor: "var(--accent)" }}>
@@ -382,11 +382,17 @@ export default function GastosViajePage() {
 
         {/* Formulario */}
         {showForm && (
-          <div className="flex-1 bg-white rounded-xl p-6" style={{ border: "1px solid #e5e5e5" }}>
+          <div className="flex-1 min-w-0 bg-white rounded-xl p-4 sm:p-6" style={{ border: "1px solid #e5e5e5" }}>
             <div className="flex items-center justify-between mb-6">
-              <h2 style={{ fontWeight: 500, fontSize: 14 }} className="text-gray-800">
-                {isNew ? "Nuevo gasto" : "Editar gasto"}
-              </h2>
+              <div className="flex items-center gap-3">
+                <button onClick={() => { setShowForm(false); setEditId(null); }}
+                  className="lg:hidden text-gray-400 hover:text-gray-600 -ml-1 p-1">
+                  ←
+                </button>
+                <h2 style={{ fontWeight: 500, fontSize: 14 }} className="text-gray-800">
+                  {isNew ? "Nuevo gasto" : "Editar gasto"}
+                </h2>
+              </div>
               {!isNew && editId && (
                 deleteConfirm === editId ? (
                   <div className="flex gap-2">

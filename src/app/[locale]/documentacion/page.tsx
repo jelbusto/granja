@@ -461,7 +461,7 @@ export default function DocumentacionPage() {
   }
 
   return (
-    <div className="p-8 bg-white min-h-screen max-w-7xl">
+    <div className="p-4 sm:p-8 bg-white min-h-screen max-w-7xl">
       <h1 style={{ fontWeight: 500, fontSize: 22 }} className="text-gray-900 mb-1">
         Documentación
       </h1>
