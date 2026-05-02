@@ -11,8 +11,14 @@ import "../globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Granjas Leche",
+  title: "Dairy Professionals",
   description: "Sistema de gestión de granjas lecheras",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "DairyPro",
+  },
+  formatDetection: { telephone: false },
 };
 
 export default async function LocaleLayout({
@@ -30,9 +36,15 @@ export default async function LocaleLayout({
 
   return (
     <html lang={locale}>
+      <head>
+        <link rel="apple-touch-icon" href="/logo.png" />
+        <meta name="theme-color" content="#111827" />
+      </head>
       <body className={inter.className}>
         {/* Applies saved theme before first paint to avoid flash */}
         <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('dp-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}` }} />
+        {/* Register service worker for PWA */}
+        <script dangerouslySetInnerHTML={{ __html: `if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}` }} />
         <ThemeProvider>
           <NextIntlClientProvider messages={messages}>
             <LayoutShell>{children}</LayoutShell>

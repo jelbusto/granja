@@ -12,5 +12,6 @@
   "usuarios": "Users",
   "cerrar_sesion": "Sign out",
   "empleados": "Employees",
-  "gastos_viaje": "Travel Expenses"
+  "gastos_viaje": "Travel Expenses",
+  "fichajes": "Time Tracking"
 }

@@ -23,6 +23,7 @@ import {
   LogoutIcon,
   IdentificationIcon,
   CreditCardIcon,
+  ClockIcon,
 } from "@/components/ui/Icons";
 
 type IconComponent = (props: SVGProps<SVGSVGElement>) => JSX.Element;
@@ -134,6 +135,7 @@ export function Sidebar() {
       icon: IdentificationIcon,
       children: [
         { kind: "link", href: "/empleados/gastos-viaje", ruta: "empleados/gastos_viaje", label: t("gastos_viaje"), icon: CreditCardIcon },
+        { kind: "link", href: "/empleados/fichajes",     ruta: "empleados/fichajes",     label: t("fichajes"),     icon: ClockIcon },
       ],
     },
     {
