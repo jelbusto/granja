@@ -6,12 +6,13 @@ import { createClient } from "@/lib/supabase/client";
 // ── Types ────────────────────────────────────────────────────────────────────
 type Trabajador = { id: string; nombre: string; apellidos: string | null };
 
-type Fichaje = {
-  id: string;
+type FichajeRow = {
+  key: string;        // local unique key (DB id if saved, random if new)
+  id: string | null;  // null = not yet in DB
   fecha: string;
-  hora_entrada: string | null;
-  hora_salida: string | null;
-  minutos_trabajados: number;
+  entrada: string;    // "HH:MM" or ""
+  salida: string;     // "HH:MM" or ""
+  minutos: number;
 };
 
 type Aprobacion = {
@@ -20,42 +21,28 @@ type Aprobacion = {
   comentario: string | null;
 };
 
-type DayEntry = {
-  fecha: string;
-  id: string | null;
-  entrada: string; // "HH:MM" or ""
-  salida: string;  // "HH:MM" or ""
-  minutos: number;
-};
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function p2(n: number) { return n.toString().padStart(2, "0"); }
 function lastDayOf(y: number, m: number) { return new Date(y, m, 0).getDate(); }
 function fmtMin(min: number) {
   const h = Math.floor(min / 60), m = min % 60;
-  if (h === 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
+  if (!h) return `${m}m`;
+  if (!m) return `${h}h`;
   return `${h}h ${m}m`;
 }
-function monthName(mes: number) {
-  return new Date(2000, mes - 1, 1).toLocaleString("es", { month: "long" });
-}
-function extractTime(iso: string): string {
-  const m = iso.match(/T(\d{2}:\d{2})/);
-  return m ? m[1] : "";
-}
-function computeMinutes(entrada: string, salida: string): number {
+function monthName(mes: number) { return new Date(2000, mes - 1, 1).toLocaleString("es", { month: "long" }); }
+function extractTime(iso: string): string { const m = iso.match(/T(\d{2}:\d{2})/); return m ? m[1] : ""; }
+function computeMin(entrada: string, salida: string): number {
   if (!entrada || !salida) return 0;
   const [eh, em] = entrada.split(":").map(Number);
   const [sh, sm] = salida.split(":").map(Number);
-  const total = (sh * 60 + sm) - (eh * 60 + em);
-  return total > 0 ? total : 0;
+  const d = (sh * 60 + sm) - (eh * 60 + em);
+  return d > 0 ? d : 0;
 }
-function timeToISO(dateStr: string, time: string): string {
-  return `${dateStr}T${time}:00`;
-}
+function timeToISO(dateStr: string, t: string) { return `${dateStr}T${t}:00`; }
+function uid() { return Math.random().toString(36).slice(2, 10); }
 
-const TIME_INPUT_CLS =
+const TIME_CLS =
   "text-sm border border-gray-200 rounded-md px-1.5 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent disabled:bg-gray-50 disabled:text-gray-300 w-[84px]";
 const SELECT_CLS =
   "text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent";
@@ -64,6 +51,7 @@ const SELECT_CLS =
 export default function FichajesPage() {
   const supabase = useRef(createClient()).current;
   const today = useRef(new Date()).current;
+  const todayStr = `${today.getFullYear()}-${p2(today.getMonth() + 1)}-${p2(today.getDate())}`;
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -73,8 +61,9 @@ export default function FichajesPage() {
   const [viewAnio, setViewAnio] = useState(today.getFullYear());
   const [viewMes, setViewMes] = useState(today.getMonth() + 1);
 
-  const [entries, setEntries] = useState<DayEntry[]>([]);
-  const [dirty, setDirty] = useState<Set<string>>(new Set());
+  const [rows, setRows] = useState<FichajeRow[]>([]);
+  const [toDelete, setToDelete] = useState<Set<string>>(new Set());
+  const [isDirty, setIsDirty] = useState(false);
   const [aprobacion, setAprobacion] = useState<Aprobacion | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -84,31 +73,26 @@ export default function FichajesPage() {
   const [showRechazar, setShowRechazar] = useState(false);
   const [rechazarComentario, setRechazarComentario] = useState("");
 
-  // ── Init: auth + profile + trabajadores ──────────────────────────────────
+  // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setCurrentUserId(user.id);
-
-      type P = { tipos_usuario: { nombre: string; es_trabajador: boolean } | null };
+      type P = { tipos_usuario: { nombre: string } | null };
       const { data: perfil } = await (supabase
         .from("usuarios_perfil" as never)
-        .select("tipos_usuario(nombre, es_trabajador)")
-        .eq("id", user.id)
-        .single()) as { data: P | null; error: unknown };
-
+        .select("tipos_usuario(nombre)")
+        .eq("id", user.id).single()) as { data: P | null; error: unknown };
       const admin = perfil?.tipos_usuario?.nombre === "Admin";
       setIsAdmin(admin);
-
       if (admin) {
         type W = { id: string; nombre: string; apellidos: string | null; tipos_usuario: { es_trabajador: boolean } };
         const { data: ws } = await (supabase
           .from("usuarios_perfil" as never)
           .select("id, nombre, apellidos, tipos_usuario!inner(es_trabajador)")
-          .eq("activo", true)
-          .order("nombre")) as { data: W[] | null; error: unknown };
-        const list = (ws ?? []).filter((w) => w.tipos_usuario.es_trabajador);
+          .eq("activo", true).order("nombre")) as { data: W[] | null; error: unknown };
+        const list = (ws ?? []).filter(w => w.tipos_usuario.es_trabajador);
         setTrabajadores(list);
         setSelectedId(list[0]?.id ?? user.id);
       } else {
@@ -122,128 +106,113 @@ export default function FichajesPage() {
   const loadData = useCallback(async () => {
     if (!selectedId) return;
     setLoading(true);
-
     const firstDay = `${viewAnio}-${p2(viewMes)}-01`;
     const lastDay  = `${viewAnio}-${p2(viewMes)}-${p2(lastDayOf(viewAnio, viewMes))}`;
-
-    type F = Fichaje; type A = Aprobacion;
+    type F = { id: string; fecha: string; hora_entrada: string | null; hora_salida: string | null; minutos_trabajados: number };
+    type A = Aprobacion;
     const [{ data: fs }, { data: apr }] = await Promise.all([
       (supabase.from("fichajes" as never)
         .select("id, fecha, hora_entrada, hora_salida, minutos_trabajados")
         .eq("id_empleado", selectedId)
-        .gte("fecha", firstDay)
-        .lte("fecha", lastDay)
-        .order("created_at", { ascending: false })) as unknown as Promise<{ data: F[] | null }>,
+        .gte("fecha", firstDay).lte("fecha", lastDay)
+        .order("fecha", { ascending: false })
+        .order("hora_entrada", { ascending: true })) as unknown as Promise<{ data: F[] | null }>,
       (supabase.from("aprobaciones_fichajes" as never)
         .select("estado, total_minutos, comentario")
-        .eq("id_empleado", selectedId)
-        .eq("anio", viewAnio)
-        .eq("mes", viewMes)
+        .eq("id_empleado", selectedId).eq("anio", viewAnio).eq("mes", viewMes)
         .maybeSingle()) as unknown as Promise<{ data: A | null }>,
     ]);
-
-    // One entry per day (take the most recent fichaje per day)
-    const fichajeMap: Record<string, Fichaje> = {};
-    for (const f of fs ?? []) {
-      if (!fichajeMap[f.fecha]) fichajeMap[f.fecha] = f;
-    }
-
-    const isCurMonth = viewAnio === today.getFullYear() && viewMes === today.getMonth() + 1;
-    const maxDay = isCurMonth ? today.getDate() : lastDayOf(viewAnio, viewMes);
-
-    // Build entries newest-first
-    const newEntries: DayEntry[] = Array.from({ length: maxDay }, (_, i) => {
-      const day = maxDay - i;
-      const fecha = `${viewAnio}-${p2(viewMes)}-${p2(day)}`;
-      const f = fichajeMap[fecha];
-      return {
-        fecha,
-        id: f?.id ?? null,
-        entrada: f?.hora_entrada ? extractTime(f.hora_entrada) : "",
-        salida:  f?.hora_salida  ? extractTime(f.hora_salida)  : "",
-        minutos: f?.minutos_trabajados ?? 0,
-      };
-    });
-
-    setEntries(newEntries);
+    setRows((fs ?? []).map(f => ({
+      key: f.id,
+      id: f.id,
+      fecha: f.fecha,
+      entrada: f.hora_entrada ? extractTime(f.hora_entrada) : "",
+      salida:  f.hora_salida  ? extractTime(f.hora_salida)  : "",
+      minutos: f.minutos_trabajados,
+    })));
     setAprobacion(apr ?? null);
-    setDirty(new Set());
+    setToDelete(new Set());
+    setIsDirty(false);
     setLoading(false);
-  }, [supabase, selectedId, viewAnio, viewMes, today]);
+  }, [supabase, selectedId, viewAnio, viewMes]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── Edit ──────────────────────────────────────────────────────────────────
-  function updateEntry(fecha: string, field: "entrada" | "salida", value: string) {
-    setEntries((prev) =>
-      prev.map((e) => {
-        if (e.fecha !== fecha) return e;
-        const updated = { ...e, [field]: value };
-        updated.minutos = computeMinutes(updated.entrada, updated.salida);
-        return updated;
-      })
-    );
-    setDirty((prev) => new Set([...prev, fecha]));
-    setMsg(null);
+  // ── Row operations ────────────────────────────────────────────────────────
+  function updateRow(key: string, field: "entrada" | "salida", value: string) {
+    setRows(prev => prev.map(r => {
+      if (r.key !== key) return r;
+      const updated = { ...r, [field]: value };
+      updated.minutos = computeMin(updated.entrada, updated.salida);
+      return updated;
+    }));
+    setIsDirty(true); setMsg(null);
+  }
+
+  function addRow(fecha: string) {
+    const newRow: FichajeRow = { key: uid(), id: null, fecha, entrada: "", salida: "", minutos: 0 };
+    setRows(prev => {
+      const lastIdx = prev.map((r, i) => r.fecha === fecha ? i : -1).filter(i => i >= 0).at(-1);
+      if (lastIdx === undefined) return [...prev, newRow];
+      const next = [...prev];
+      next.splice(lastIdx + 1, 0, newRow);
+      return next;
+    });
+    setIsDirty(true); setMsg(null);
+  }
+
+  function removeRow(key: string, id: string | null) {
+    setRows(prev => prev.filter(r => r.key !== key));
+    if (id) setToDelete(prev => new Set([...prev, id]));
+    setIsDirty(true); setMsg(null);
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
   async function handleSave() {
-    const toSave   = entries.filter((e) => dirty.has(e.fecha) && (e.entrada || e.salida));
-    const toDelete = entries.filter((e) => dirty.has(e.fecha) && !e.entrada && !e.salida && e.id);
-
     setSaving(true); setMsg(null);
-
-    for (const e of toSave) {
-      if (e.id) {
+    for (const id of toDelete) {
+      await (supabase.from("fichajes" as never).delete().eq("id", id));
+    }
+    for (const r of rows) {
+      if (!r.entrada && !r.salida) continue;
+      if (r.id) {
         await (supabase.from("fichajes" as never).update({
-          hora_entrada: e.entrada ? timeToISO(e.fecha, e.entrada) : null,
-          hora_salida:  e.salida  ? timeToISO(e.fecha, e.salida)  : null,
-          minutos_trabajados: e.minutos,
-        } as never).eq("id", e.id));
+          hora_entrada:      r.entrada ? timeToISO(r.fecha, r.entrada) : null,
+          hora_salida:       r.salida  ? timeToISO(r.fecha, r.salida)  : null,
+          minutos_trabajados: r.minutos,
+        } as never).eq("id", r.id));
       } else {
-        const { data: ins } = await (supabase.from("fichajes" as never).insert({
-          id_empleado: selectedId,
-          fecha: e.fecha,
-          hora_entrada: e.entrada ? timeToISO(e.fecha, e.entrada) : null,
-          hora_salida:  e.salida  ? timeToISO(e.fecha, e.salida)  : null,
-          minutos_trabajados: e.minutos,
-          es_manual: true,
-        } as never).select("id").single()) as unknown as { data: { id: string } | null };
-        if (ins) setEntries((prev) => prev.map((x) => x.fecha === e.fecha ? { ...x, id: ins.id } : x));
+        await (supabase.from("fichajes" as never).insert({
+          id_empleado:       selectedId,
+          fecha:             r.fecha,
+          hora_entrada:      r.entrada ? timeToISO(r.fecha, r.entrada) : null,
+          hora_salida:       r.salida  ? timeToISO(r.fecha, r.salida)  : null,
+          minutos_trabajados: r.minutos,
+          es_manual:         true,
+        } as never));
       }
     }
-
-    for (const e of toDelete) {
-      await (supabase.from("fichajes" as never).delete().eq("id", e.id!));
-      setEntries((prev) => prev.map((x) => x.fecha === e.fecha ? { ...x, id: null } : x));
-    }
-
-    setDirty(new Set());
+    await loadData();
     setMsg({ ok: true, text: "Cambios guardados." });
     setSaving(false);
   }
 
   // ── Month nav ─────────────────────────────────────────────────────────────
   const isCurrentMonth = viewAnio === today.getFullYear() && viewMes === today.getMonth() + 1;
-
   function prevMonth() {
-    if (viewMes === 1) { setViewAnio(viewAnio - 1); setViewMes(12); }
-    else setViewMes(viewMes - 1);
-    setDirty(new Set()); setMsg(null);
+    if (viewMes === 1) { setViewAnio(viewAnio - 1); setViewMes(12); } else setViewMes(viewMes - 1);
+    setMsg(null);
   }
   function nextMonth() {
     if (isCurrentMonth) return;
-    if (viewMes === 12) { setViewAnio(viewAnio + 1); setViewMes(1); }
-    else setViewMes(viewMes + 1);
-    setDirty(new Set()); setMsg(null);
+    if (viewMes === 12) { setViewAnio(viewAnio + 1); setViewMes(1); } else setViewMes(viewMes + 1);
+    setMsg(null);
   }
 
   // ── Approval ─────────────────────────────────────────────────────────────
-  const totalMin = entries.reduce((s, e) => s + e.minutos, 0);
+  const totalMin = rows.reduce((s, r) => s + r.minutos, 0);
   const isOwnData = selectedId === currentUserId;
-  const approved = aprobacion?.estado === "aprobado";
-  const canEdit = isAdmin || (isOwnData && !approved);
+  const canEdit = isAdmin || (isOwnData && aprobacion?.estado !== "aprobado");
 
   async function handleAprobar() {
     setSaving(true);
@@ -266,9 +235,14 @@ export default function FichajesPage() {
     setShowRechazar(false); setRechazarComentario(""); loadData(); setSaving(false);
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  const todayStr = `${today.getFullYear()}-${p2(today.getMonth() + 1)}-${p2(today.getDate())}`;
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const maxDay = isCurrentMonth ? today.getDate() : lastDayOf(viewAnio, viewMes);
+  const allDates = Array.from({ length: maxDay }, (_, i) => {
+    const day = maxDay - i;
+    return `${viewAnio}-${p2(viewMes)}-${p2(day)}`;
+  });
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-4 sm:p-8 bg-white min-h-screen max-w-3xl">
       <h1 className="text-gray-900 mb-1" style={{ fontWeight: 500, fontSize: 22 }}>Fichajes</h1>
@@ -278,9 +252,9 @@ export default function FichajesPage() {
       {isAdmin && trabajadores.length > 0 && (
         <div className="mb-5">
           <label className="block mb-1.5 text-xs font-medium uppercase tracking-wide" style={{ color: "#888780" }}>Empleado</label>
-          <select value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setDirty(new Set()); }}
+          <select value={selectedId} onChange={e => { setSelectedId(e.target.value); setMsg(null); }}
             className={`${SELECT_CLS} w-full sm:w-72`}>
-            {trabajadores.map((t) => (
+            {trabajadores.map(t => (
               <option key={t.id} value={t.id}>{t.nombre} {t.apellidos ?? ""}</option>
             ))}
           </select>
@@ -302,22 +276,21 @@ export default function FichajesPage() {
             ›
           </button>
         </div>
-
         <div className="flex items-center gap-3 ml-auto">
           <span className="text-sm" style={{ color: "#888780" }}>
             Total: <strong className="text-gray-800">{fmtMin(totalMin)}</strong>
           </span>
-          {canEdit && dirty.size > 0 && (
+          {canEdit && isDirty && (
             <button onClick={handleSave} disabled={saving}
               className="px-4 py-1.5 rounded-lg text-sm font-medium text-white disabled:opacity-50"
               style={{ backgroundColor: "var(--accent)" }}>
-              {saving ? "Guardando…" : `Guardar (${dirty.size})`}
+              {saving ? "Guardando…" : "Guardar"}
             </button>
           )}
         </div>
       </div>
 
-      {/* Status message */}
+      {/* Message */}
       {msg && (
         <div className="mb-3 rounded-lg px-4 py-2.5 text-sm"
           style={{ backgroundColor: msg.ok ? "#ECFDF5" : "#FEF2F2", color: msg.ok ? "#3B6D11" : "#A32D2D" }}>
@@ -325,7 +298,7 @@ export default function FichajesPage() {
         </div>
       )}
 
-      {/* Monthly approval banner (non-admin) */}
+      {/* Approval banner (employee view) */}
       {!loading && !isAdmin && aprobacion && (
         <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium"
           style={{
@@ -337,79 +310,82 @@ export default function FichajesPage() {
         </div>
       )}
 
-      {/* Day table */}
+      {/* Day list */}
       {loading ? (
         <p style={{ color: "#888780", fontSize: 13 }} className="text-center py-8">Cargando…</p>
       ) : (
-        <div className="rounded-xl overflow-hidden mb-8" style={{ border: "1px solid #e5e5e5" }}>
-          <table className="w-full">
-            <thead>
-              <tr style={{ backgroundColor: "#f8f7f4" }}>
-                <th className="text-left px-3 py-2.5 text-xs font-medium uppercase tracking-wide" style={{ color: "#888780" }}>Día</th>
-                <th className="px-2 py-2.5 text-xs font-medium uppercase tracking-wide text-center" style={{ color: "#888780" }}>Entrada</th>
-                <th className="px-2 py-2.5 text-xs font-medium uppercase tracking-wide text-center" style={{ color: "#888780" }}>Salida</th>
-                <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-right" style={{ color: "#888780" }}>Horas</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((e, i) => {
-                const d = new Date(`${e.fecha}T12:00:00`);
-                const isToday = e.fecha === todayStr;
-                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                const isDirty = dirty.has(e.fecha);
+        <div className="space-y-2 mb-8">
+          {allDates.map(fecha => {
+            const dayRows = rows.filter(r => r.fecha === fecha);
+            const dt = dayRows.reduce((s, r) => s + r.minutos, 0);
+            const d = new Date(`${fecha}T12:00:00`);
+            const isToday = fecha === todayStr;
+            const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+            const dayLabel = d.toLocaleDateString("es", { weekday: "short", day: "numeric", month: "short" });
 
-                return (
-                  <tr key={e.fecha}
-                    style={{
-                      borderTop: "1px solid #f0f0f0",
-                      backgroundColor: i % 2 === 0 ? "white" : "#fafafa",
-                    }}>
-                    <td className="px-3 py-2 min-w-[90px]">
-                      <span
-                        className={`text-sm font-medium capitalize ${isToday ? "" : isWeekend ? "text-gray-400" : "text-gray-700"}`}
-                        style={isToday ? { color: "var(--accent)" } : undefined}>
-                        {d.toLocaleDateString("es", { weekday: "short", day: "numeric" })}
+            return (
+              <div key={fecha} className="rounded-xl overflow-hidden" style={{ border: "1px solid #e5e5e5" }}>
+                {/* Day header */}
+                <div className="flex items-center justify-between px-4 py-2.5" style={{ backgroundColor: "#f8f7f4" }}>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-sm font-medium capitalize ${!isToday && isWeekend ? "text-gray-400" : !isToday ? "text-gray-700" : ""}`}
+                      style={isToday ? { color: "var(--accent)" } : undefined}>
+                      {dayLabel}
+                    </span>
+                    {isToday && (
+                      <span className="text-white text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--accent)", fontSize: 10 }}>
+                        Hoy
                       </span>
-                      {isDirty && (
-                        <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-orange-400 align-middle" title="Sin guardar" />
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5 text-center">
-                      <input
-                        type="time"
-                        value={e.entrada}
-                        onChange={(ev) => updateEntry(e.fecha, "entrada", ev.target.value)}
-                        disabled={!canEdit}
-                        className={TIME_INPUT_CLS}
-                      />
-                    </td>
-                    <td className="px-2 py-1.5 text-center">
-                      <input
-                        type="time"
-                        value={e.salida}
-                        onChange={(ev) => updateEntry(e.fecha, "salida", ev.target.value)}
-                        disabled={!canEdit}
-                        className={TIME_INPUT_CLS}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap">
-                      <span className={`text-sm font-medium ${e.minutos > 0 ? "text-gray-800" : "text-gray-300"}`}>
-                        {e.minutos > 0 ? fmtMin(e.minutos) : "—"}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    )}
+                  </div>
+                  <span className={`text-sm font-semibold ${dt > 0 ? "text-gray-800" : "text-gray-300"}`}>
+                    {dt > 0 ? fmtMin(dt) : "—"}
+                  </span>
+                </div>
+
+                {/* Entry rows */}
+                {dayRows.map(r => (
+                  <div key={r.key} className="flex items-center gap-2 px-3 py-2.5" style={{ borderTop: "1px solid #f0f0f0" }}>
+                    <input type="time" value={r.entrada}
+                      onChange={ev => updateRow(r.key, "entrada", ev.target.value)}
+                      disabled={!canEdit} className={TIME_CLS} />
+                    <span className="text-gray-300">→</span>
+                    <input type="time" value={r.salida}
+                      onChange={ev => updateRow(r.key, "salida", ev.target.value)}
+                      disabled={!canEdit} className={TIME_CLS} />
+                    <span className="text-xs font-medium text-gray-500 w-10 text-right flex-shrink-0">
+                      {r.minutos > 0 ? fmtMin(r.minutos) : ""}
+                    </span>
+                    {canEdit && (
+                      <button onClick={() => removeRow(r.key, r.id)}
+                        className="ml-auto text-gray-200 hover:text-red-400 transition-colors text-sm flex-shrink-0"
+                        title="Eliminar">
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {/* Add row */}
+                {canEdit && (
+                  <div className="px-4 py-2" style={{ borderTop: dayRows.length > 0 ? "1px solid #f0f0f0" : undefined }}>
+                    <button onClick={() => addRow(fecha)}
+                      className="text-xs text-gray-400 hover:text-gray-700 transition-colors">
+                      + Añadir
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Approval section (admin viewing another employee) */}
+      {/* Approval section (admin viewing employee) */}
       {!loading && isAdmin && !isOwnData && (
         <div className="rounded-xl p-4" style={{ border: "1px solid #e5e5e5" }}>
           <div className="text-sm font-medium text-gray-800 mb-3">Aprobación mensual</div>
-
           {aprobacion ? (
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium mb-3"
@@ -420,9 +396,7 @@ export default function FichajesPage() {
                 {aprobacion.estado === "aprobado" ? "✓ Aprobado" : aprobacion.estado === "rechazado" ? "✗ Rechazado" : "⏳ Pendiente"}
                 {" — "}{fmtMin(aprobacion.total_minutos)}
               </div>
-              {aprobacion.comentario && (
-                <p className="text-sm text-gray-500 mb-3 italic">&ldquo;{aprobacion.comentario}&rdquo;</p>
-              )}
+              {aprobacion.comentario && <p className="text-sm text-gray-500 mb-3 italic">&ldquo;{aprobacion.comentario}&rdquo;</p>}
               <div className="flex gap-2 flex-wrap">
                 {aprobacion.estado !== "aprobado" && (
                   <button onClick={handleAprobar} disabled={saving}
@@ -441,9 +415,7 @@ export default function FichajesPage() {
             </div>
           ) : (
             <div>
-              <p className="text-sm text-gray-500 mb-3">
-                Sin aprobación registrada. Total acumulado: <strong>{fmtMin(totalMin)}</strong>
-              </p>
+              <p className="text-sm text-gray-500 mb-3">Sin aprobación. Total: <strong>{fmtMin(totalMin)}</strong></p>
               <div className="flex gap-2 flex-wrap">
                 <button onClick={handleAprobar} disabled={saving || totalMin === 0}
                   className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
@@ -457,12 +429,10 @@ export default function FichajesPage() {
               </div>
             </div>
           )}
-
           {showRechazar && (
             <div className="mt-3 p-3 rounded-lg" style={{ border: "1px solid #FECACA" }}>
               <label className="block text-xs text-gray-500 mb-1">Motivo (opcional)</label>
-              <input type="text" value={rechazarComentario}
-                onChange={(ev) => setRechazarComentario(ev.target.value)}
+              <input type="text" value={rechazarComentario} onChange={ev => setRechazarComentario(ev.target.value)}
                 placeholder="Explica el motivo…"
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent mb-2" />
               <div className="flex gap-2">
