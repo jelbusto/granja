@@ -10,5 +10,7 @@
   "configuracion": "Settings",
   "tipos_usuario": "User Types",
   "usuarios": "Users",
-  "cerrar_sesion": "Sign out"
+  "cerrar_sesion": "Sign out",
+  "empleados": "Employees",
+  "gastos_viaje": "Travel Expenses"
 }

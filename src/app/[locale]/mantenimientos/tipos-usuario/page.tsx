@@ -29,6 +29,8 @@ const RUTAS: { ruta: string; label: string; grupo?: string }[] = [
   { ruta: "mantenimientos/granjas",        label: "→ Granjas",             grupo: "mantenimientos" },
   { ruta: "mantenimientos/tipos_usuario",  label: "→ Tipos de Usuario",    grupo: "mantenimientos" },
   { ruta: "mantenimientos/usuarios",       label: "→ Usuarios",            grupo: "mantenimientos" },
+  { ruta: "mantenimientos/empleados",      label: "→ Empleados",           grupo: "mantenimientos" },
+  { ruta: "gastos_viaje",                  label: "Gastos de Viaje" },
   { ruta: "configuracion",                 label: "Configuración" },
 ];
 
