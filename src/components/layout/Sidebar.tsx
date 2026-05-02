@@ -24,6 +24,8 @@ import {
   IdentificationIcon,
   CreditCardIcon,
   ClockIcon,
+  CalendarIcon,
+  TagIcon,
 } from "@/components/ui/Icons";
 
 type IconComponent = (props: SVGProps<SVGSVGElement>) => JSX.Element;
@@ -133,7 +135,8 @@ export function Sidebar() {
     { kind: "link", href: "/produccion",    ruta: "produccion",     label: t("datos_produccion"),  icon: ChartBarIcon },
     { kind: "link", href: "/economico",     ruta: "economico",      label: t("datos_economicos"),  icon: BanknotesIcon },
     { kind: "link", href: "/carga-datos",   ruta: "carga_datos",    label: t("carga_datos"),       icon: ArrowUpTrayIcon },
-    { kind: "link", href: "/documentacion", ruta: "documentacion", label: t("documentacion"), icon: DocumentIcon },
+    { kind: "link", href: "/documentacion", ruta: "documentacion",  label: t("documentacion"),     icon: DocumentIcon },
+    { kind: "link", href: "/actividades",   ruta: "actividades",    label: t("actividades"),       icon: CalendarIcon },
     {
       kind: "group",
       key: "empleados",
@@ -152,9 +155,10 @@ export function Sidebar() {
       label: t("mantenimientos"),
       icon: WrenchIcon,
       children: [
-        { kind: "link", href: "/granjas",                      ruta: "mantenimientos/granjas",       label: t("granjas"),       icon: BuildingOfficeIcon },
-        { kind: "link", href: "/mantenimientos/tipos-usuario", ruta: "mantenimientos/tipos_usuario", label: t("tipos_usuario"), icon: UsersIcon },
-        { kind: "link", href: "/mantenimientos/usuarios",      ruta: "mantenimientos/usuarios",      label: t("usuarios"),      icon: UserIcon },
+        { kind: "link", href: "/granjas",                          ruta: "mantenimientos/granjas",          label: t("granjas"),          icon: BuildingOfficeIcon },
+        { kind: "link", href: "/mantenimientos/tipos-usuario",     ruta: "mantenimientos/tipos_usuario",    label: t("tipos_usuario"),    icon: UsersIcon },
+        { kind: "link", href: "/mantenimientos/usuarios",          ruta: "mantenimientos/usuarios",         label: t("usuarios"),         icon: UserIcon },
+        { kind: "link", href: "/mantenimientos/tipos-actividad",   ruta: "mantenimientos/tipos_actividad",  label: t("tipos_actividad"),  icon: TagIcon },
       ],
     },
     { kind: "link", href: "/configuracion", ruta: "configuracion",  label: t("configuracion"),     icon: CogIcon },

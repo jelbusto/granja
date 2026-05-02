@@ -19,9 +19,15 @@ type Usuario = {
   id_granja: string | null;
   id_aprobador: string | null;
   activo: boolean;
+  color: string | null;
   tipos_usuario: { nombre: string } | null;
   granjas: { nombre: string } | null;
 };
+
+const COLOR_PALETTE = [
+  "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6",
+  "#06B6D4", "#F97316", "#EC4899", "#84CC16", "#14B8A6",
+];
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -56,6 +62,8 @@ export default function UsuariosPage() {
   const [idGranja, setIdGranja]     = useState("");
   const [idAprobador, setIdAprobador] = useState("");
   const [activo, setActivo]         = useState(true);
+
+  const [color, setColor]                 = useState("");
 
   const [saving, setSaving]               = useState(false);
   const [msg, setMsg]                     = useState<{ ok: boolean; text: string } | null>(null);
@@ -98,7 +106,7 @@ export default function UsuariosPage() {
     setIsNew(true); setEditId(null);
     setNombre(""); setApellidos(""); setEmail(""); setPassword("");
     setTelefono(""); setNColegiado(""); setIdTipo(""); setIdGranja("");
-    setIdAprobador(""); setActivo(true);
+    setIdAprobador(""); setActivo(true); setColor("");
     setMsg(null); setShowForm(true);
   }
 
@@ -107,7 +115,7 @@ export default function UsuariosPage() {
     setNombre(u.nombre); setApellidos(u.apellidos ?? ""); setEmail(u.email ?? "");
     setPassword(""); setTelefono(u.telefono ?? ""); setNColegiado(u.n_colegiado ?? "");
     setIdTipo(u.id_tipo_usuario ?? ""); setIdGranja(u.id_granja ?? "");
-    setIdAprobador(u.id_aprobador ?? ""); setActivo(u.activo);
+    setIdAprobador(u.id_aprobador ?? ""); setActivo(u.activo); setColor(u.color ?? "");
     setMsg(null); setShowForm(true);
   }
 
@@ -147,6 +155,7 @@ export default function UsuariosPage() {
           id_granja:    (!esTrabajador && idGranja) ? idGranja : null,
           id_aprobador: (esTrabajador && idAprobador) ? idAprobador : null,
           activo,
+          color: (esTrabajador && color) ? color : null,
         } as never)) as unknown as { error: { message: string } | null };
 
       if (profileError) throw new Error(profileError.message);
@@ -287,6 +296,36 @@ export default function UsuariosPage() {
                     ))}
                   </select>
                   <p className="mt-1 text-xs" style={{ color: "#888780" }}>Solo admins pueden aprobar gastos</p>
+                </div>
+              )}
+
+              {/* Color de calendario: solo para trabajadores */}
+              {esTrabajador && idTipo && (
+                <div className="sm:col-span-2">
+                  <FieldLabel>Color en calendario</FieldLabel>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {COLOR_PALETTE.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setColor(color === c ? "" : c)}
+                        className="w-7 h-7 rounded-full flex items-center justify-center transition-transform hover:scale-110 flex-shrink-0"
+                        style={{ backgroundColor: c, outline: color === c ? `3px solid ${c}` : "none", outlineOffset: 2 }}
+                        title={c}
+                      >
+                        {color === c && (
+                          <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 12 12">
+                            <polyline points="2 6 5 9 10 3" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                    {color && (
+                      <button type="button" onClick={() => setColor("")} className="text-xs text-gray-400 hover:text-gray-600 ml-1">
+                        Quitar
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 

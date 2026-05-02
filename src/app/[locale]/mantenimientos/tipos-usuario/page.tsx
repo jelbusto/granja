@@ -20,19 +20,21 @@ type PermisoMenu = {
 };
 
 const RUTAS: { ruta: string; label: string; grupo?: string }[] = [
-  { ruta: "dashboard",                     label: "Visión General" },
-  { ruta: "produccion",                    label: "Datos de Producción" },
-  { ruta: "economico",                     label: "Datos Económicos" },
-  { ruta: "carga_datos",                   label: "Carga de Datos" },
-  { ruta: "documentacion",                 label: "Documentación" },
-  { ruta: "empleados",                     label: "Empleados (grupo)",     grupo: "empleados" },
-  { ruta: "empleados/gastos_viaje",        label: "→ Gastos de Viaje",     grupo: "empleados" },
-  { ruta: "empleados/fichajes",           label: "→ Fichajes",             grupo: "empleados" },
-  { ruta: "mantenimientos",                label: "Mantenimientos (grupo)", grupo: "mantenimientos" },
-  { ruta: "mantenimientos/granjas",        label: "→ Granjas",             grupo: "mantenimientos" },
-  { ruta: "mantenimientos/tipos_usuario",  label: "→ Tipos de Usuario",    grupo: "mantenimientos" },
-  { ruta: "mantenimientos/usuarios",       label: "→ Usuarios",            grupo: "mantenimientos" },
-  { ruta: "configuracion",                 label: "Configuración" },
+  { ruta: "dashboard",                        label: "Visión General" },
+  { ruta: "produccion",                       label: "Datos de Producción" },
+  { ruta: "economico",                        label: "Datos Económicos" },
+  { ruta: "carga_datos",                      label: "Carga de Datos" },
+  { ruta: "documentacion",                    label: "Documentación" },
+  { ruta: "actividades",                      label: "Actividades" },
+  { ruta: "empleados",                        label: "Empleados (grupo)",     grupo: "empleados" },
+  { ruta: "empleados/gastos_viaje",           label: "→ Gastos de Viaje",     grupo: "empleados" },
+  { ruta: "empleados/fichajes",               label: "→ Fichajes",            grupo: "empleados" },
+  { ruta: "mantenimientos",                   label: "Mantenimientos (grupo)", grupo: "mantenimientos" },
+  { ruta: "mantenimientos/granjas",           label: "→ Granjas",             grupo: "mantenimientos" },
+  { ruta: "mantenimientos/tipos_usuario",     label: "→ Tipos de Usuario",    grupo: "mantenimientos" },
+  { ruta: "mantenimientos/usuarios",          label: "→ Usuarios",            grupo: "mantenimientos" },
+  { ruta: "mantenimientos/tipos_actividad",   label: "→ Tipos de Actividad",  grupo: "mantenimientos" },
+  { ruta: "configuracion",                    label: "Configuración" },
 ];
 
 function FieldLabel({ children }: { children: React.ReactNode }) {

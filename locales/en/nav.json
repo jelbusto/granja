@@ -13,5 +13,7 @@
   "cerrar_sesion": "Sign out",
   "empleados": "Employees",
   "gastos_viaje": "Travel Expenses",
-  "fichajes": "Time Tracking"
+  "fichajes": "Time Tracking",
+  "actividades": "Activities",
+  "tipos_actividad": "Activity Types"
 }

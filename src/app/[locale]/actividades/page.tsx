@@ -1,0 +1,951 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { PlusIcon, TrashIcon, ChevronDownIcon } from "@/components/ui/Icons";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+type Empleado = { id: string; nombre: string; apellidos: string | null; color: string | null };
+type TipoActividad = { id: string; nombre: string };
+type Granja = { id: string; nombre: string };
+
+type Activity = {
+  id: string;
+  fecha: string;
+  hora_inicio: string | null;
+  hora_fin: string | null;
+  id_tipo: string | null;
+  id_granja: string | null;
+  comentarios: string | null;
+  tipo: { nombre: string } | null;
+  granja: { nombre: string } | null;
+  empleados: { id: string; nombre: string; apellidos: string | null; color: string | null }[];
+};
+
+type View = "month" | "week" | "day";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function p2(n: number) { return n.toString().padStart(2, "0"); }
+function dateStr(d: Date) { return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; }
+
+function weekStart(d: Date): Date {
+  const r = new Date(d);
+  const dow = r.getDay();
+  r.setDate(r.getDate() - (dow === 0 ? 6 : dow - 1));
+  r.setHours(0, 0, 0, 0);
+  return r;
+}
+
+function weekDays(start: Date): Date[] {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+}
+
+function monthGrid(year: number, month: number): Date[][] {
+  const first = new Date(year, month, 1);
+  const dow = first.getDay();
+  const offset = dow === 0 ? 6 : dow - 1;
+  const start = new Date(first);
+  start.setDate(1 - offset);
+  const rows: Date[][] = [];
+  for (let row = 0; row < 6; row++) {
+    const week: Date[] = [];
+    for (let col = 0; col < 7; col++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + row * 7 + col);
+      week.push(d);
+    }
+    rows.push(week);
+  }
+  return rows;
+}
+
+const HOUR_START = 7;
+const HOUR_END = 21;
+const HOUR_H = 60; // px per hour
+
+function timeToTop(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return (h - HOUR_START) * HOUR_H + (m / 60) * HOUR_H;
+}
+
+function timeToDuration(start: string, end: string): number {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const mins = (eh * 60 + em) - (sh * 60 + sm);
+  return Math.max(mins / 60 * HOUR_H, 20);
+}
+
+function actColor(act: Activity): string {
+  return act.empleados[0]?.color ?? "#6B7280";
+}
+
+function hexToRgb(hex: string) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `${r},${g},${b}`;
+}
+
+const DAY_NAMES_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+// ── Component ─────────────────────────────────────────────────────────────────
+export default function ActividadesPage() {
+  const supabase = useRef(createClient()).current;
+  const today = useRef(new Date()).current;
+  const todayStr = dateStr(today);
+
+  const [view, setView] = useState<View>("week");
+  const [currentDate, setCurrentDate] = useState<Date>(new Date(today));
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [granjas, setGranjas] = useState<Granja[]>([]);
+  const [tiposActividad, setTiposActividad] = useState<TipoActividad[]>([]);
+
+  // Modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [fFecha, setFFecha] = useState("");
+  const [fHoraInicio, setFHoraInicio] = useState("");
+  const [fHoraFin, setFHoraFin] = useState("");
+  const [fTipo, setFTipo] = useState("");
+  const [fGranja, setFGranja] = useState("");
+  const [fComentarios, setFComentarios] = useState("");
+  const [fEmpleados, setFEmpleados] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+  // ── Load reference data ──────────────────────────────────────────────────
+  useEffect(() => {
+    async function loadRef() {
+      type R<T> = Promise<{ data: T | null }>;
+      const [{ data: emps }, { data: gs }, { data: tipos }] = await Promise.all([
+        supabase.from("usuarios_perfil" as never)
+          .select("id, nombre, apellidos, color, tipos_usuario!inner(es_trabajador)")
+          .eq("activo", true)
+          .eq("tipos_usuario.es_trabajador", true)
+          .order("nombre") as unknown as R<(Empleado & { tipos_usuario: { es_trabajador: boolean } })[]>,
+        supabase.from("granjas" as never)
+          .select("id, nombre")
+          .eq("activo", true)
+          .order("nombre") as unknown as R<Granja[]>,
+        supabase.from("tipos_actividad" as never)
+          .select("id, nombre")
+          .eq("activo", true)
+          .order("nombre") as unknown as R<TipoActividad[]>,
+      ]);
+      setEmpleados(emps ?? []);
+      setGranjas(gs ?? []);
+      setTiposActividad(tipos ?? []);
+    }
+    loadRef();
+  }, [supabase]);
+
+  // ── Load activities ──────────────────────────────────────────────────────
+  const loadActivities = useCallback(async () => {
+    setLoading(true);
+
+    // Determine date range based on view
+    let from: string, to: string;
+    if (view === "day") {
+      from = to = dateStr(currentDate);
+    } else if (view === "week") {
+      const ws = weekStart(currentDate);
+      const we = new Date(ws);
+      we.setDate(we.getDate() + 6);
+      from = dateStr(ws);
+      to = dateStr(we);
+    } else {
+      // month: load entire month + buffer for grid
+      const grid = monthGrid(currentDate.getFullYear(), currentDate.getMonth());
+      from = dateStr(grid[0][0]);
+      to = dateStr(grid[5][6]);
+    }
+
+    type RawAct = {
+      id: string;
+      fecha: string;
+      hora_inicio: string | null;
+      hora_fin: string | null;
+      id_tipo: string | null;
+      id_granja: string | null;
+      comentarios: string | null;
+      tipos_actividad: { nombre: string } | null;
+      granjas: { nombre: string } | null;
+      actividades_empleados: {
+        usuarios_perfil: { id: string; nombre: string; apellidos: string | null; color: string | null } | null;
+      }[];
+    };
+
+    const { data } = await (supabase
+      .from("actividades" as never)
+      .select(`
+        id, fecha, hora_inicio, hora_fin, id_tipo, id_granja, comentarios,
+        tipos_actividad(nombre),
+        granjas(nombre),
+        actividades_empleados(usuarios_perfil(id, nombre, apellidos, color))
+      `)
+      .gte("fecha", from)
+      .lte("fecha", to)
+      .order("fecha", { ascending: true })
+      .order("hora_inicio", { ascending: true })) as unknown as Promise<{ data: RawAct[] | null }>;
+
+    const acts: Activity[] = (data ?? []).map((row) => ({
+      id: row.id,
+      fecha: row.fecha,
+      hora_inicio: row.hora_inicio,
+      hora_fin: row.hora_fin,
+      id_tipo: row.id_tipo,
+      id_granja: row.id_granja,
+      comentarios: row.comentarios,
+      tipo: row.tipos_actividad,
+      granja: row.granjas,
+      empleados: (row.actividades_empleados ?? [])
+        .map((ae) => ae.usuarios_perfil)
+        .filter((e): e is NonNullable<typeof e> => e !== null),
+    }));
+    setActivities(acts);
+    setLoading(false);
+  }, [supabase, view, currentDate]);
+
+  useEffect(() => { loadActivities(); }, [loadActivities]);
+
+  // ── Navigation ───────────────────────────────────────────────────────────
+  function navigate(dir: 1 | -1) {
+    const d = new Date(currentDate);
+    if (view === "day") d.setDate(d.getDate() + dir);
+    else if (view === "week") d.setDate(d.getDate() + dir * 7);
+    else d.setMonth(d.getMonth() + dir);
+    setCurrentDate(d);
+  }
+
+  function periodLabel(): string {
+    if (view === "day") {
+      const d = currentDate;
+      return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+    }
+    if (view === "week") {
+      const ws = weekStart(currentDate);
+      const we = new Date(ws);
+      we.setDate(we.getDate() + 6);
+      if (ws.getMonth() === we.getMonth()) {
+        return `${ws.getDate()}–${we.getDate()} ${MONTH_NAMES[ws.getMonth()]} ${ws.getFullYear()}`;
+      }
+      return `${ws.getDate()} ${MONTH_NAMES[ws.getMonth()]} – ${we.getDate()} ${MONTH_NAMES[we.getMonth()]} ${ws.getFullYear()}`;
+    }
+    return `${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+  }
+
+  // ── Modal helpers ────────────────────────────────────────────────────────
+  function openNew(fecha?: string, hora?: string) {
+    setEditId(null);
+    setFFecha(fecha ?? todayStr);
+    setFHoraInicio(hora ?? "");
+    setFHoraFin("");
+    setFTipo(tiposActividad[0]?.id ?? "");
+    setFGranja("");
+    setFComentarios("");
+    setFEmpleados([]);
+    setMsg(null);
+    setDeleteConfirm(false);
+    setModalOpen(true);
+  }
+
+  function openEdit(act: Activity) {
+    setEditId(act.id);
+    setFFecha(act.fecha);
+    setFHoraInicio(act.hora_inicio?.slice(0, 5) ?? "");
+    setFHoraFin(act.hora_fin?.slice(0, 5) ?? "");
+    setFTipo(act.id_tipo ?? "");
+    setFGranja(act.id_granja ?? "");
+    setFComentarios(act.comentarios ?? "");
+    setFEmpleados(act.empleados.map((e) => e.id));
+    setMsg(null);
+    setDeleteConfirm(false);
+    setModalOpen(true);
+  }
+
+  function closeModal() {
+    setModalOpen(false);
+    setEditId(null);
+  }
+
+  function toggleEmpleado(id: string) {
+    setFEmpleados((prev) =>
+      prev.includes(id) ? prev.filter((e) => e !== id) : [...prev, id]
+    );
+  }
+
+  async function handleSave() {
+    if (!fFecha) { setMsg({ ok: false, text: "La fecha es obligatoria." }); return; }
+    setSaving(true); setMsg(null);
+
+    type DbResult<T> = Promise<{ data: T | null; error: { message: string } | null }>;
+
+    const payload = {
+      fecha: fFecha,
+      hora_inicio: fHoraInicio || null,
+      hora_fin: fHoraFin || null,
+      id_tipo: fTipo || null,
+      id_granja: fGranja || null,
+      comentarios: fComentarios.trim() || null,
+    };
+
+    let actividadId = editId;
+
+    if (editId) {
+      const { error } = await (supabase
+        .from("actividades" as never)
+        .update(payload as never)
+        .eq("id", editId)) as unknown as DbResult<null>;
+      if (error) { setMsg({ ok: false, text: error.message }); setSaving(false); return; }
+    } else {
+      const { data, error } = await (supabase
+        .from("actividades" as never)
+        .insert(payload as never)
+        .select("id")
+        .single()) as unknown as DbResult<{ id: string }>;
+      if (error || !data) { setMsg({ ok: false, text: error?.message ?? "Error" }); setSaving(false); return; }
+      actividadId = data.id;
+    }
+
+    // Delete old junction rows
+    await (supabase
+      .from("actividades_empleados" as never)
+      .delete()
+      .eq("id_actividad", actividadId));
+
+    // Insert new junction rows
+    if (fEmpleados.length > 0) {
+      const junctionRows = fEmpleados.map((id_empleado) => ({ id_actividad: actividadId, id_empleado }));
+      await (supabase
+        .from("actividades_empleados" as never)
+        .insert(junctionRows as never));
+    }
+
+    setMsg({ ok: true, text: "Guardado correctamente." });
+    loadActivities();
+    setSaving(false);
+    setTimeout(closeModal, 800);
+  }
+
+  async function handleDelete() {
+    if (!editId) return;
+    setSaving(true);
+    await (supabase.from("actividades" as never).delete().eq("id", editId));
+    closeModal();
+    loadActivities();
+    setSaving(false);
+  }
+
+  // ── Time grid helpers ────────────────────────────────────────────────────
+  const hours = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
+  const totalGridH = (HOUR_END - HOUR_START) * HOUR_H;
+
+  function activitiesForDate(d: Date): Activity[] {
+    return activities.filter((a) => a.fecha === dateStr(d));
+  }
+
+  function slotClickHandler(d: Date, hour: number) {
+    openNew(dateStr(d), `${p2(hour)}:00`);
+  }
+
+  // ── Render: activity card (week/day view) ────────────────────────────────
+  function renderCard(act: Activity, narrow = false) {
+    const color = actColor(act);
+    const rgb = hexToRgb(color);
+    const top = act.hora_inicio ? timeToTop(act.hora_inicio.slice(0, 5)) : 0;
+    const height = (act.hora_inicio && act.hora_fin)
+      ? timeToDuration(act.hora_inicio.slice(0, 5), act.hora_fin.slice(0, 5))
+      : 36;
+
+    return (
+      <div
+        key={act.id}
+        onClick={(e) => { e.stopPropagation(); openEdit(act); }}
+        className="absolute left-0.5 right-0.5 rounded-md cursor-pointer overflow-hidden select-none z-10"
+        style={{
+          top,
+          height,
+          backgroundColor: `rgba(${rgb},0.12)`,
+          borderLeft: `4px solid ${color}`,
+        }}
+      >
+        <div className="px-1.5 py-1 h-full overflow-hidden">
+          {act.hora_inicio && (
+            <div className="text-xs font-medium leading-none mb-0.5" style={{ color }}>
+              {act.hora_inicio.slice(0, 5)}
+              {act.hora_fin ? `–${act.hora_fin.slice(0, 5)}` : ""}
+            </div>
+          )}
+          {!narrow && (
+            <div className="text-xs text-gray-700 truncate leading-tight">
+              {act.tipo?.nombre ?? "Sin tipo"}
+            </div>
+          )}
+          {act.empleados.length > 0 && (
+            <div className="flex gap-0.5 mt-0.5 flex-wrap">
+              {act.empleados.slice(0, 3).map((e) => (
+                <span
+                  key={e.id}
+                  className="inline-block w-2 h-2 rounded-full"
+                  style={{ backgroundColor: e.color ?? "#6B7280" }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Week view ────────────────────────────────────────────────────────────
+  function WeekView() {
+    const ws = weekStart(currentDate);
+    const days = weekDays(ws);
+
+    return (
+      <div className="flex flex-col overflow-hidden rounded-xl" style={{ border: "1px solid #e5e5e5" }}>
+        {/* Header */}
+        <div className="flex" style={{ borderBottom: "1px solid #e5e5e5" }}>
+          <div className="w-12 flex-shrink-0" />
+          {days.map((d, i) => {
+            const isToday = dateStr(d) === todayStr;
+            return (
+              <div
+                key={i}
+                className="flex-1 text-center py-2 text-xs font-medium"
+                style={{
+                  color: isToday ? "var(--accent)" : "#888780",
+                  borderLeft: "1px solid #e5e5e5",
+                  backgroundColor: isToday ? "rgba(var(--accent-rgb,59,130,246),0.04)" : undefined,
+                }}
+              >
+                <div>{DAY_NAMES_SHORT[i]}</div>
+                <div
+                  className={`text-base font-semibold mt-0.5 mx-auto w-7 h-7 flex items-center justify-center rounded-full ${isToday ? "text-white" : "text-gray-800"}`}
+                  style={isToday ? { backgroundColor: "var(--accent)" } : undefined}
+                >
+                  {d.getDate()}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Scrollable time grid */}
+        <div className="overflow-y-auto" style={{ maxHeight: 600 }}>
+          <div className="flex" style={{ position: "relative" }}>
+            {/* Time labels */}
+            <div className="w-12 flex-shrink-0 relative" style={{ height: totalGridH }}>
+              {hours.map((h) => (
+                <div
+                  key={h}
+                  className="absolute right-1 text-xs"
+                  style={{ top: (h - HOUR_START) * HOUR_H - 6, color: "#aaa", fontSize: 10 }}
+                >
+                  {p2(h)}:00
+                </div>
+              ))}
+            </div>
+
+            {/* Day columns */}
+            {days.map((d, i) => {
+              const isToday = dateStr(d) === todayStr;
+              const dayActs = activitiesForDate(d);
+              return (
+                <div
+                  key={i}
+                  className="flex-1 relative cursor-pointer"
+                  style={{
+                    height: totalGridH,
+                    borderLeft: "1px solid #e5e5e5",
+                    backgroundColor: isToday ? "rgba(59,130,246,0.02)" : undefined,
+                  }}
+                  onClick={() => slotClickHandler(d, HOUR_START)}
+                >
+                  {/* Hour lines */}
+                  {hours.map((h) => (
+                    <div
+                      key={h}
+                      className="absolute left-0 right-0 pointer-events-none"
+                      style={{ top: (h - HOUR_START) * HOUR_H, borderTop: "1px solid #f0f0f0" }}
+                    />
+                  ))}
+                  {/* Activities */}
+                  {dayActs.map((act) => renderCard(act, true))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Day view ─────────────────────────────────────────────────────────────
+  function DayView() {
+    const dayActs = activitiesForDate(currentDate);
+    const isToday = dateStr(currentDate) === todayStr;
+
+    return (
+      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #e5e5e5" }}>
+        {/* Header */}
+        <div
+          className="py-3 text-center text-sm font-medium"
+          style={{ borderBottom: "1px solid #e5e5e5", color: isToday ? "var(--accent)" : "#444" }}
+        >
+          {DAY_NAMES_SHORT[(currentDate.getDay() + 6) % 7]} {currentDate.getDate()} {MONTH_NAMES[currentDate.getMonth()]}
+        </div>
+
+        {/* Time grid */}
+        <div className="overflow-y-auto" style={{ maxHeight: 600 }}>
+          <div className="flex" style={{ position: "relative" }}>
+            <div className="w-12 flex-shrink-0 relative" style={{ height: totalGridH }}>
+              {hours.map((h) => (
+                <div
+                  key={h}
+                  className="absolute right-1 text-xs"
+                  style={{ top: (h - HOUR_START) * HOUR_H - 6, color: "#aaa", fontSize: 10 }}
+                >
+                  {p2(h)}:00
+                </div>
+              ))}
+            </div>
+            <div
+              className="flex-1 relative cursor-pointer"
+              style={{ height: totalGridH, borderLeft: "1px solid #e5e5e5" }}
+              onClick={() => slotClickHandler(currentDate, HOUR_START)}
+            >
+              {hours.map((h) => (
+                <div
+                  key={h}
+                  className="absolute left-0 right-0 pointer-events-none"
+                  style={{ top: (h - HOUR_START) * HOUR_H, borderTop: "1px solid #f0f0f0" }}
+                />
+              ))}
+              {dayActs.map((act) => renderCard(act, false))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Month view ────────────────────────────────────────────────────────────
+  function MonthView() {
+    const grid = monthGrid(currentDate.getFullYear(), currentDate.getMonth());
+    const thisMonth = currentDate.getMonth();
+
+    return (
+      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #e5e5e5" }}>
+        {/* Day headers */}
+        <div className="grid grid-cols-7" style={{ borderBottom: "1px solid #e5e5e5" }}>
+          {DAY_NAMES_SHORT.map((name) => (
+            <div
+              key={name}
+              className="py-2 text-center text-xs font-medium uppercase tracking-wide"
+              style={{ color: "#888780" }}
+            >
+              {name}
+            </div>
+          ))}
+        </div>
+
+        {/* Grid rows */}
+        {grid.map((week, wi) => (
+          <div key={wi} className="grid grid-cols-7" style={{ borderBottom: wi < 5 ? "1px solid #e5e5e5" : undefined }}>
+            {week.map((d, di) => {
+              const ds = dateStr(d);
+              const isToday = ds === todayStr;
+              const isThisMonth = d.getMonth() === thisMonth;
+              const dayActs = activities.filter((a) => a.fecha === ds);
+              const visible = dayActs.slice(0, 3);
+              const overflow = dayActs.length - visible.length;
+
+              return (
+                <div
+                  key={di}
+                  className={`min-h-[80px] p-1 cursor-pointer hover:bg-gray-50 transition-colors ${di > 0 ? "" : ""}`}
+                  style={{ borderLeft: di > 0 ? "1px solid #e5e5e5" : undefined }}
+                  onClick={() => { setCurrentDate(new Date(d)); setView("day"); }}
+                >
+                  <div className="flex justify-end mb-1">
+                    <span
+                      className={`text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full ${
+                        isToday ? "text-white" : isThisMonth ? "text-gray-800" : "text-gray-300"
+                      }`}
+                      style={isToday ? { backgroundColor: "var(--accent)" } : undefined}
+                    >
+                      {d.getDate()}
+                    </span>
+                  </div>
+                  <div className="space-y-0.5">
+                    {visible.map((act) => {
+                      const color = actColor(act);
+                      return (
+                        <div
+                          key={act.id}
+                          onClick={(e) => { e.stopPropagation(); openEdit(act); }}
+                          className="text-xs px-1 py-0.5 rounded truncate"
+                          style={{ backgroundColor: `${color}22`, color, border: `1px solid ${color}44` }}
+                        >
+                          {act.tipo?.nombre ?? act.hora_inicio?.slice(0, 5) ?? "Actividad"}
+                        </div>
+                      );
+                    })}
+                    {overflow > 0 && (
+                      <div className="text-xs px-1 py-0.5" style={{ color: "#888780" }}>
+                        +{overflow} más
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // ── Mobile list view ──────────────────────────────────────────────────────
+  function MobileList() {
+    const dayActs = activitiesForDate(currentDate);
+    return (
+      <div>
+        <div className="mb-3 text-sm font-medium text-gray-700">
+          {DAY_NAMES_SHORT[(currentDate.getDay() + 6) % 7]} {currentDate.getDate()} {MONTH_NAMES[currentDate.getMonth()]}
+        </div>
+        {dayActs.length === 0 ? (
+          <div className="text-center py-8 text-sm" style={{ color: "#888780" }}>
+            No hay actividades para este día
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {dayActs.map((act) => {
+              const color = actColor(act);
+              return (
+                <div
+                  key={act.id}
+                  onClick={() => openEdit(act)}
+                  className="rounded-xl p-3 cursor-pointer"
+                  style={{ border: "1px solid #e5e5e5", borderLeft: `4px solid ${color}` }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-medium text-gray-800">{act.tipo?.nombre ?? "Sin tipo"}</div>
+                      {(act.hora_inicio || act.granja) && (
+                        <div className="text-xs mt-0.5" style={{ color: "#888780" }}>
+                          {act.hora_inicio?.slice(0, 5)}{act.hora_fin ? `–${act.hora_fin.slice(0, 5)}` : ""}
+                          {act.granja ? ` · ${act.granja.nombre}` : ""}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-1">
+                      {act.empleados.map((e) => (
+                        <span
+                          key={e.id}
+                          className="w-5 h-5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: e.color ?? "#6B7280" }}
+                          title={`${e.nombre} ${e.apellidos ?? ""}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div className="p-4 sm:p-8 bg-white min-h-screen">
+      {/* Page title */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-gray-900" style={{ fontWeight: 500, fontSize: 22 }}>Actividades</h1>
+          <p style={{ color: "#888780", fontSize: 13 }}>Calendario de visitas, reuniones y actividades</p>
+        </div>
+        <button
+          onClick={() => openNew()}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white self-start sm:self-auto"
+          style={{ backgroundColor: "var(--accent)" }}
+        >
+          <PlusIcon className="h-4 w-4" />
+          Nueva actividad
+        </button>
+      </div>
+
+      {/* Calendar header: view switcher + nav */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {/* View switcher */}
+        <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid #e5e5e5" }}>
+          {(["day", "week", "month"] as View[]).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className="px-3 py-1.5 text-xs font-medium transition-colors"
+              style={{
+                backgroundColor: view === v ? "var(--accent)" : "white",
+                color: view === v ? "white" : "#555",
+              }}
+            >
+              {v === "day" ? "Día" : v === "week" ? "Semana" : "Mes"}
+            </button>
+          ))}
+        </div>
+
+        {/* Navigation */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-600 text-xl transition-colors"
+          >
+            ‹
+          </button>
+          <span className="text-sm font-medium text-gray-700 min-w-[160px] text-center capitalize">
+            {periodLabel()}
+          </span>
+          <button
+            onClick={() => navigate(1)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-600 text-xl transition-colors"
+          >
+            ›
+          </button>
+        </div>
+
+        <button
+          onClick={() => setCurrentDate(new Date(today))}
+          className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+        >
+          Hoy
+        </button>
+      </div>
+
+      {/* Calendar views */}
+      {loading ? (
+        <div className="text-center py-16" style={{ color: "#888780", fontSize: 13 }}>Cargando…</div>
+      ) : (
+        <>
+          {/* Desktop: full calendar views */}
+          <div className="hidden lg:block overflow-x-auto">
+            {view === "week" && <WeekView />}
+            {view === "day" && <DayView />}
+            {view === "month" && <MonthView />}
+          </div>
+
+          {/* Mobile: scrollable week with list fallback */}
+          <div className="lg:hidden">
+            {view === "month" ? (
+              <MonthView />
+            ) : (
+              <>
+                {/* Day navigation */}
+                <div className="flex items-center gap-1 mb-3">
+                  <button onClick={() => navigate(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-600 text-xl">‹</button>
+                  <span className="text-sm text-gray-700 flex-1 text-center">{periodLabel()}</span>
+                  <button onClick={() => navigate(1)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-600 text-xl">›</button>
+                </div>
+                <MobileList />
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── Modal ──────────────────────────────────────────────────────────── */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+          <div
+            className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6"
+            style={{ border: "1px solid #e5e5e5" }}
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between mb-5">
+              <h2 style={{ fontWeight: 500, fontSize: 15 }} className="text-gray-800">
+                {editId ? "Editar actividad" : "Nueva actividad"}
+              </h2>
+              {editId && !deleteConfirm && (
+                <button
+                  onClick={() => setDeleteConfirm(true)}
+                  className="text-gray-300 hover:text-red-500 transition-colors"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {deleteConfirm && (
+              <div className="mb-4 p-3 rounded-xl flex items-center justify-between gap-3" style={{ border: "1px solid #FECACA", backgroundColor: "#FEF2F2" }}>
+                <span className="text-sm text-red-700">¿Eliminar esta actividad?</span>
+                <div className="flex gap-2">
+                  <button onClick={handleDelete} disabled={saving} className="text-xs font-medium text-red-600 hover:underline">Eliminar</button>
+                  <button onClick={() => setDeleteConfirm(false)} className="text-xs text-gray-400 hover:underline">Cancelar</button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {/* Fecha */}
+              <div>
+                <label className="block mb-1.5 text-xs font-medium uppercase tracking-wide" style={{ color: "#888780" }}>Fecha *</label>
+                <input
+                  type="date"
+                  value={fFecha}
+                  onChange={(e) => setFFecha(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+
+              {/* Horas */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1.5 text-xs font-medium uppercase tracking-wide" style={{ color: "#888780" }}>Hora inicio</label>
+                  <input
+                    type="time"
+                    value={fHoraInicio}
+                    onChange={(e) => setFHoraInicio(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-xs font-medium uppercase tracking-wide" style={{ color: "#888780" }}>Hora fin</label>
+                  <input
+                    type="time"
+                    value={fHoraFin}
+                    onChange={(e) => setFHoraFin(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+                  />
+                </div>
+              </div>
+
+              {/* Tipo */}
+              <div>
+                <label className="block mb-1.5 text-xs font-medium uppercase tracking-wide" style={{ color: "#888780" }}>Tipo de actividad</label>
+                <select
+                  value={fTipo}
+                  onChange={(e) => setFTipo(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+                >
+                  <option value="">— Sin tipo —</option>
+                  {tiposActividad.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                </select>
+              </div>
+
+              {/* Empleados */}
+              <div>
+                <label className="block mb-1.5 text-xs font-medium uppercase tracking-wide" style={{ color: "#888780" }}>Empleados</label>
+                <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #e5e5e5" }}>
+                  {empleados.length === 0 ? (
+                    <p className="px-3 py-2 text-xs" style={{ color: "#888780" }}>No hay empleados disponibles</p>
+                  ) : (
+                    empleados.map((emp, i) => {
+                      const selected = fEmpleados.includes(emp.id);
+                      return (
+                        <label
+                          key={emp.id}
+                          className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50 transition-colors"
+                          style={{ borderTop: i > 0 ? "1px solid #f0f0f0" : undefined }}
+                        >
+                          <div className="relative flex-shrink-0">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => toggleEmpleado(emp.id)}
+                              className="sr-only"
+                            />
+                            <div
+                              className="w-4 h-4 rounded flex items-center justify-center"
+                              style={{
+                                backgroundColor: selected ? (emp.color ?? "var(--accent)") : "white",
+                                border: `2px solid ${selected ? (emp.color ?? "var(--accent)") : "#d1d5db"}`,
+                              }}
+                            >
+                              {selected && (
+                                <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 12 12">
+                                  <polyline points="2 6 5 9 10 3" />
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                          <span
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: emp.color ?? "#6B7280" }}
+                          />
+                          <span className="text-sm text-gray-700">{emp.nombre} {emp.apellidos ?? ""}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Granja */}
+              <div>
+                <label className="block mb-1.5 text-xs font-medium uppercase tracking-wide" style={{ color: "#888780" }}>Granja (opcional)</label>
+                <select
+                  value={fGranja}
+                  onChange={(e) => setFGranja(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent"
+                >
+                  <option value="">— Sin granja —</option>
+                  {granjas.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+                </select>
+              </div>
+
+              {/* Comentarios */}
+              <div>
+                <label className="block mb-1.5 text-xs font-medium uppercase tracking-wide" style={{ color: "#888780" }}>Comentarios</label>
+                <textarea
+                  value={fComentarios}
+                  onChange={(e) => setFComentarios(e.target.value)}
+                  rows={3}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-accent resize-none"
+                  placeholder="Notas adicionales…"
+                />
+              </div>
+            </div>
+
+            {msg && (
+              <div
+                className="mt-4 rounded-lg px-4 py-3 text-sm"
+                style={{ backgroundColor: msg.ok ? "#ECFDF5" : "#FEF2F2", color: msg.ok ? "#3B6D11" : "#A32D2D" }}
+              >
+                {msg.text}
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                style={{ backgroundColor: "var(--accent)" }}
+              >
+                {saving ? "Guardando…" : "Guardar"}
+              </button>
+              <button
+                onClick={closeModal}
+                className="px-5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
