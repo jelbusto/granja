@@ -297,7 +297,12 @@ export default function ActividadesPage() {
     setEditId(null);
     setFFecha(fecha ?? todayStr);
     setFHoraInicio(hora ?? "");
-    setFHoraFin("");
+    if (hora) {
+      const [h, m] = hora.split(":").map(Number);
+      setFHoraFin(`${p2(Math.min(h + 1, HOUR_END))}:${p2(m)}`);
+    } else {
+      setFHoraFin("");
+    }
     setFTipo(tiposActividad[0]?.id ?? "");
     setFGranja("");
     setFDescripcion("");
@@ -602,7 +607,11 @@ export default function ActividadesPage() {
                 <div key={i} className="flex-1 relative cursor-pointer"
                   style={{ height: totalGridH, borderLeft: "1px solid #e5e5e5",
                     backgroundColor: isToday ? "rgba(59,130,246,0.02)" : undefined }}
-                  onClick={() => openNew(dateStr(d), `${p2(HOUR_START)}:00`)}>
+                  onClick={(e) => {
+                    const offsetY = e.clientY - e.currentTarget.getBoundingClientRect().top;
+                    const h = Math.min(Math.max(HOUR_START + Math.floor(offsetY / HOUR_H), HOUR_START), HOUR_END - 1);
+                    openNew(dateStr(d), `${p2(h)}:00`);
+                  }}>
                   {hours.map((h) => (
                     <div key={h} className="absolute left-0 right-0 pointer-events-none"
                       style={{ top: (h - HOUR_START) * HOUR_H, borderTop: "1px solid #f0f0f0" }} />
@@ -724,7 +733,11 @@ export default function ActividadesPage() {
               </div>
               <div className="flex-1 relative cursor-pointer"
                 style={{ height: totalGridH, borderLeft: "1px solid #e5e5e5" }}
-                onClick={() => openNew(dateStr(currentDate), `${p2(HOUR_START)}:00`)}>
+                onClick={(e) => {
+                  const offsetY = e.clientY - e.currentTarget.getBoundingClientRect().top;
+                  const h = Math.min(Math.max(HOUR_START + Math.floor(offsetY / HOUR_H), HOUR_START), HOUR_END - 1);
+                  openNew(dateStr(currentDate), `${p2(h)}:00`);
+                }}>
                 {hours.map((h) => (
                   <div key={h} className="absolute left-0 right-0 pointer-events-none"
                     style={{ top: (h - HOUR_START) * HOUR_H, borderTop: "1px solid #f0f0f0" }} />
