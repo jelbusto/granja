@@ -7,28 +7,36 @@ import { BellIcon } from "@/components/ui/Icons";
 
 export function BellNotification() {
   const supabase = useRef(createClient()).current;
-  const router = useRouter();
+  const router   = useRouter();
   const [pendientes, setPendientes] = useState(0);
 
-  async function fetchCount() {
+  // Stored in a ref so the Realtime callback always uses the latest uid
+  const uidRef = useRef<string>("");
+
+  // Each sidebar instance (desktop + mobile) needs a unique channel name
+  const channelName = useRef(`tareas-bell-${Math.random().toString(36).slice(2)}`).current;
+
+  async function fetchCount(uid: string) {
+    if (!uid) return;
     const { count } = await (supabase
       .from("tareas" as never)
       .select("id", { count: "exact", head: true })
-      .eq("estado", "pendiente")) as unknown as { count: number | null };
+      .eq("estado", "pendiente")
+      .eq("id_empleado", uid)) as unknown as { count: number | null };
     setPendientes(count ?? 0);
   }
 
-  // Unique channel name per instance — Sidebar renders two BellNotification
-  // components (desktop + mobile) simultaneously; a shared name causes the
-  // second .on() call to throw "cannot add callbacks after subscribe()".
-  const channelName = useRef(`tareas-bell-${Math.random().toString(36).slice(2)}`).current;
-
   useEffect(() => {
-    fetchCount();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const uid = user?.id ?? "";
+      uidRef.current = uid;
+      fetchCount(uid);
+    });
 
     const channel = supabase
       .channel(channelName)
-      .on("postgres_changes", { event: "*", schema: "public", table: "tareas" }, fetchCount)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tareas" },
+        () => fetchCount(uidRef.current))
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
