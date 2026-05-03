@@ -18,11 +18,16 @@ export function BellNotification() {
     setPendientes(count ?? 0);
   }
 
+  // Unique channel name per instance — Sidebar renders two BellNotification
+  // components (desktop + mobile) simultaneously; a shared name causes the
+  // second .on() call to throw "cannot add callbacks after subscribe()".
+  const channelName = useRef(`tareas-bell-${Math.random().toString(36).slice(2)}`).current;
+
   useEffect(() => {
     fetchCount();
 
     const channel = supabase
-      .channel("tareas-bell")
+      .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "tareas" }, fetchCount)
       .subscribe();
 
