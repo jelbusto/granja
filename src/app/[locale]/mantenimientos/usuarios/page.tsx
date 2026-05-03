@@ -14,6 +14,7 @@ type Usuario = {
   apellidos: string | null;
   email: string | null;
   telefono: string | null;
+  direccion: string | null;
   n_colegiado: string | null;
   id_tipo_usuario: string | null;
   id_granja: string | null;
@@ -57,6 +58,7 @@ export default function UsuariosPage() {
   const [email, setEmail]           = useState("");
   const [password, setPassword]     = useState("");
   const [telefono, setTelefono]     = useState("");
+  const [direccion, setDireccion]   = useState("");
   const [nColegiado, setNColegiado] = useState("");
   const [idTipo, setIdTipo]         = useState("");
   const [idGranja, setIdGranja]     = useState("");
@@ -105,7 +107,7 @@ export default function UsuariosPage() {
   function openNew() {
     setIsNew(true); setEditId(null);
     setNombre(""); setApellidos(""); setEmail(""); setPassword("");
-    setTelefono(""); setNColegiado(""); setIdTipo(""); setIdGranja("");
+    setTelefono(""); setDireccion(""); setNColegiado(""); setIdTipo(""); setIdGranja("");
     setIdAprobador(""); setActivo(true); setColor("");
     setMsg(null); setShowForm(true);
   }
@@ -113,7 +115,8 @@ export default function UsuariosPage() {
   function openEdit(u: Usuario) {
     setIsNew(false); setEditId(u.id);
     setNombre(u.nombre); setApellidos(u.apellidos ?? ""); setEmail(u.email ?? "");
-    setPassword(""); setTelefono(u.telefono ?? ""); setNColegiado(u.n_colegiado ?? "");
+    setPassword(""); setTelefono(u.telefono ?? ""); setDireccion(u.direccion ?? "");
+    setNColegiado(u.n_colegiado ?? "");
     setIdTipo(u.id_tipo_usuario ?? ""); setIdGranja(u.id_granja ?? "");
     setIdAprobador(u.id_aprobador ?? ""); setActivo(u.activo); setColor(u.color ?? "");
     setMsg(null); setShowForm(true);
@@ -150,6 +153,7 @@ export default function UsuariosPage() {
           apellidos:    apellidos.trim()   || null,
           email:        email.trim()       || null,
           telefono:     telefono.trim()    || null,
+          direccion:    direccion.trim()   || null,
           n_colegiado:  nColegiado.trim()  || null,
           id_tipo_usuario: idTipo          || null,
           id_granja:    (!esTrabajador && idGranja) ? idGranja : null,
@@ -261,6 +265,10 @@ export default function UsuariosPage() {
               <div>
                 <FieldLabel>Teléfono</FieldLabel>
                 <input type="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} className={INPUT_CLS} placeholder="+34 600 000 000" />
+              </div>
+              <div className="sm:col-span-2">
+                <FieldLabel>Dirección</FieldLabel>
+                <input type="text" value={direccion} onChange={(e) => setDireccion(e.target.value)} className={INPUT_CLS} placeholder="Calle, número, ciudad, provincia" />
               </div>
               <div>
                 <FieldLabel>Nº Colegiado</FieldLabel>
