@@ -11,7 +11,8 @@ AS $$
   SELECT EXISTS (
     SELECT 1
     FROM usuarios_perfil up
-    JOIN permisos_menu pm ON pm.id_tipo_usuario = up.id_tipo_usuario
+    JOIN permisos_menu pm
+      ON pm.id_tipo_usuario::text = up.id_tipo_usuario::text
     WHERE up.id = auth.uid()
     AND pm.puede_editar = true
   );
