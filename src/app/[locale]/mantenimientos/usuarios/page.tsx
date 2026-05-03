@@ -164,6 +164,26 @@ export default function UsuariosPage() {
 
       if (profileError) throw new Error(profileError.message);
 
+      // Geocodificar la dirección en segundo plano
+      const addr = direccion.trim();
+      if (addr && userId) {
+        fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1`,
+          { headers: { "User-Agent": "DairyPro/1.0" } }
+        )
+          .then((r) => r.json())
+          .then((data: { lat: string; lon: string }[]) => {
+            if (data.length) {
+              (supabase
+                .from("usuarios_perfil" as never)
+                .update({ lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) } as never)
+                .eq("id", userId!) as unknown as Promise<unknown>
+              ).catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
+
       setMsg({ ok: true, text: "Usuario guardado correctamente." });
       loadData();
     } catch (err) {

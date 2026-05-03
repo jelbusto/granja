@@ -233,23 +233,23 @@ export function Sidebar() {
     );
   }
 
-  function UserFooter() {
+  function UserHeader() {
     if (!userName) return null;
     return (
-      <div className="px-3 py-4 border-t border-gray-700">
-        <div className="flex items-center gap-3 mb-2 px-1">
+      <div className="px-3 py-3 border-b border-gray-700">
+        <div className="flex items-center gap-3 px-1">
           <div className="h-7 w-7 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
             <UserIcon className="h-4 w-4 text-gray-300" />
           </div>
-          <span className="text-sm text-gray-300 truncate">{userName}</span>
+          <span className="text-sm text-gray-300 truncate flex-1">{userName}</span>
+          <button
+            onClick={handleLogout}
+            title={t("cerrar_sesion")}
+            className="flex-shrink-0 text-gray-500 hover:text-white transition-colors p-1 rounded"
+          >
+            <LogoutIcon className="h-4 w-4" />
+          </button>
         </div>
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-        >
-          <LogoutIcon className="h-4 w-4 flex-shrink-0" />
-          {t("cerrar_sesion")}
-        </button>
       </div>
     );
   }
@@ -259,10 +259,10 @@ export function Sidebar() {
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex lg:flex-col w-64 flex-shrink-0 bg-gray-900 min-h-screen border-r border-gray-700">
         <div className="px-4 py-5 border-b border-gray-700"><SidebarLogo /></div>
+        <UserHeader />
         <nav className="flex-1 overflow-y-auto">
           <NavList onClose={() => {}} />
         </nav>
-        <UserFooter />
       </aside>
 
       {/* Mobile top bar */}
@@ -286,10 +286,10 @@ export function Sidebar() {
             <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
+        <UserHeader />
         <nav className="flex-1 overflow-y-auto">
           <NavList onClose={() => setMobileOpen(false)} />
         </nav>
-        <UserFooter />
       </aside>
     </>
   );
