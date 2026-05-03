@@ -1,6 +1,25 @@
 import { createClient } from "./server";
 import type { Tables, TipoSalaEnum, WeatherStation, ObjetivosGranja } from "@/types/database";
 
+async function geocodeAddress(
+  direccion: string | null,
+  poblacion: string | null,
+  provincia: string | null
+): Promise<{ lat: number; lon: number } | null> {
+  const parts = [direccion, poblacion, provincia].filter(Boolean);
+  if (!parts.length) return null;
+  try {
+    const q = encodeURIComponent(parts.join(", "));
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`,
+      { headers: { "User-Agent": "DairyPro/1.0" } }
+    );
+    const data = (await res.json()) as { lat: string; lon: string }[];
+    if (data.length) return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+  } catch {}
+  return null;
+}
+
 export type GranjaListRow = Pick<
   Tables<"granjas">,
   "id" | "codigo" | "nombre" | "pais" | "activo"
@@ -128,11 +147,13 @@ export async function saveGranja(formData: GranjaFormData): Promise<ActionResult
   const { sala, objetivos, ...granjaData } = formData;
   const now = new Date().toISOString();
 
+  const geo = await geocodeAddress(granjaData.direccion, granjaData.poblacion, granjaData.provincia);
+
   if (!granjaData.id) {
     // ── INSERT ────────────────────────────────────────────────────────────
     const { data: inserted, error: granjaErr } = await supabase
       .from("granjas")
-      .insert({ ...granjaData, updated_at: now })
+      .insert({ ...granjaData, ...(geo ?? {}), updated_at: now })
       .select("id")
       .single();
 
@@ -156,7 +177,7 @@ export async function saveGranja(formData: GranjaFormData): Promise<ActionResult
   // ── UPDATE ────────────────────────────────────────────────────────────
   const { error: granjaErr } = await supabase
     .from("granjas")
-    .update({ ...granjaData, updated_at: now })
+    .update({ ...granjaData, ...(geo ?? {}), updated_at: now })
     .eq("id", granjaData.id);
 
   if (granjaErr) return { data: null, error: { message: granjaErr.message } };
