@@ -1103,23 +1103,8 @@ export default function ActividadesPage() {
               <h2 style={{ fontWeight: 500, fontSize: 15 }} className="text-gray-800">
                 {editId ? "Editar actividad" : "Nueva actividad"}
               </h2>
-              {editId && !deleteConfirm && (
-                <button onClick={() => setDeleteConfirm(true)} className="text-gray-300 hover:text-red-500 transition-colors">
-                  <TrashIcon className="h-4 w-4" />
-                </button>
-              )}
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 transition-colors" style={{ fontSize: 20, lineHeight: 1 }}>×</button>
             </div>
-
-            {deleteConfirm && (
-              <div className="mb-4 p-3 rounded-xl flex items-center justify-between gap-3"
-                style={{ border: "1px solid #FECACA", backgroundColor: "#FEF2F2" }}>
-                <span className="text-sm text-red-700">¿Eliminar esta actividad?</span>
-                <div className="flex gap-2">
-                  <button onClick={handleDelete} disabled={saving} className="text-xs font-medium text-red-600 hover:underline">Eliminar</button>
-                  <button onClick={() => setDeleteConfirm(false)} className="text-xs text-gray-400 hover:underline">Cancelar</button>
-                </div>
-              </div>
-            )}
 
             <div className="space-y-4">
               <div>
@@ -1213,16 +1198,38 @@ export default function ActividadesPage() {
               </div>
             )}
 
-            <div className="flex gap-3 mt-5">
-              <button onClick={handleSave} disabled={saving}
-                className="px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-                style={{ backgroundColor: "var(--accent)" }}>
-                {saving ? "Guardando…" : "Guardar"}
-              </button>
-              <button onClick={closeModal}
-                className="px-5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50">
-                Cancelar
-              </button>
+            <div className="flex items-center gap-3 mt-5">
+              {editId && !deleteConfirm && (
+                <button onClick={() => setDeleteConfirm(true)} disabled={saving}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-red-600 border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-50">
+                  <TrashIcon className="h-4 w-4" />
+                  Eliminar
+                </button>
+              )}
+              {editId && deleteConfirm && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-red-600 font-medium">¿Seguro?</span>
+                  <button onClick={handleDelete} disabled={saving}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-colors">
+                    {saving ? "…" : "Sí, eliminar"}
+                  </button>
+                  <button onClick={() => setDeleteConfirm(false)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors">
+                    No
+                  </button>
+                </div>
+              )}
+              <div className="flex gap-3 ml-auto">
+                <button onClick={handleSave} disabled={saving}
+                  className="px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                  style={{ backgroundColor: "var(--accent)" }}>
+                  {saving ? "Guardando…" : "Guardar"}
+                </button>
+                <button onClick={closeModal}
+                  className="px-5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50">
+                  Cancelar
+                </button>
+              </div>
             </div>
           </div>
         </div>
