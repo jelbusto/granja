@@ -10,6 +10,7 @@ import { saveGranjaAction } from "@/lib/actions/granjas";
 import type { GranjaWithSala, ObjetivosFormData } from "@/lib/supabase/granjas";
 import type { TipoSalaEnum, WeatherStation } from "@/types/database";
 import { PAISES, PROVINCIAS, type PaisCodigo } from "@/lib/geo/provinces";
+import { createClient } from "@/lib/supabase/client";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -225,6 +226,27 @@ export function GranjaForm({ granja, weatherStations, objetivos, locale }: Granj
     if (result.error) {
       setServerError(result.error);
       return;
+    }
+
+    const supabase = createClient();
+    const address = [values.direccion, values.poblacion, values.provincia].filter(Boolean).join(", ");
+    if (address && result.id) {
+      fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`,
+        { headers: { "User-Agent": "DairyPro/1.0" } }
+      )
+        .then((r) => r.json())
+        .then((data: { lat: string; lon: string }[]) => {
+          if (data.length) {
+            (
+              supabase
+                .from("granjas" as never)
+                .update({ lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) } as never)
+                .eq("id", result.id!) as unknown as Promise<unknown>
+            ).catch(() => {});
+          }
+        })
+        .catch(() => {});
     }
 
     router.push("/granjas");

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { PlusIcon, TrashIcon } from "@/components/ui/Icons";
+import LeafletMap from "@/components/maps/LeafletMap";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Empleado = { id: string; nombre: string; apellidos: string | null; color: string | null };
@@ -19,14 +20,22 @@ type Activity = {
   descripcion: string | null;
   comentarios: string | null;
   tipo: { nombre: string } | null;
-  granja: { nombre: string; direccion: string | null; poblacion: string | null } | null;
+  granja: { nombre: string; direccion: string | null; poblacion: string | null; lat: number | null; lon: number | null } | null;
   empleados: { id: string; nombre: string; apellidos: string | null; color: string | null }[];
 };
 
 type View = "month" | "week" | "day" | "list";
 
-type DistLeg = { from: string; to: string; km: number };
-type DistResult = { total: number; legs: DistLeg[]; error?: string };
+type EmpRoute = {
+  empleadoId: string;
+  empleadoNombre: string;
+  empleadoColor: string | null;
+  status: "idle" | "loading" | "done" | "error";
+  totalKm: number;
+  waypoints: { lat: number; lon: number; label: string; isHome?: boolean }[];
+  route: { type: "LineString"; coordinates: [number, number][] } | null;
+  error?: string;
+};
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 function p2(n: number) { return n.toString().padStart(2, "0"); }
@@ -92,8 +101,8 @@ function hexToRgb(hex: string) {
 const DAY_NAMES_SHORT = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
-// ── Geocoding & distance ──────────────────────────────────────────────────────
-async function geocodeAddress(addr: string): Promise<{ lat: number; lon: number } | null> {
+// ── Geocoding & routing helpers ───────────────────────────────────────────────
+async function geocodeNominatim(addr: string): Promise<{ lat: number; lon: number } | null> {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1`,
@@ -105,14 +114,21 @@ async function geocodeAddress(addr: string): Promise<{ lat: number; lon: number 
   } catch { return null; }
 }
 
-function haversineKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
-  const R = 6371;
-  const dLat = (b.lat - a.lat) * Math.PI / 180;
-  const dLon = (b.lon - a.lon) * Math.PI / 180;
-  const lat1 = a.lat * Math.PI / 180;
-  const lat2 = b.lat * Math.PI / 180;
-  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.asin(Math.sqrt(x));
+async function getOSRMRoute(
+  wps: { lat: number; lon: number }[]
+): Promise<{ distanceM: number; geometry: { type: "LineString"; coordinates: [number, number][] } } | null> {
+  if (wps.length < 2) return null;
+  try {
+    const coords = wps.map((p) => `${p.lon},${p.lat}`).join(";");
+    const res = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`
+    );
+    const json = await res.json() as {
+      routes?: { distance: number; geometry: { type: "LineString"; coordinates: [number, number][] } }[];
+    };
+    if (!json.routes?.length) return null;
+    return { distanceM: json.routes[0].distance, geometry: json.routes[0].geometry };
+  } catch { return null; }
 }
 
 function sleep(ms: number) { return new Promise<void>((r) => setTimeout(r, ms)); }
@@ -151,9 +167,10 @@ export default function ActividadesPage() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
-  // Distance (day view only)
-  const [calcDist, setCalcDist] = useState(false);
-  const [distResult, setDistResult] = useState<DistResult | null>(null);
+  // Routes per employee (day view)
+  const [empRoutes, setEmpRoutes] = useState<EmpRoute[]>([]);
+  const [routeMapFor, setRouteMapFor] = useState<string | null>(null);
+  const [calculatingAll, setCalculatingAll] = useState(false);
 
   // ── Load reference data ──────────────────────────────────────────────────
   useEffect(() => {
@@ -201,7 +218,7 @@ export default function ActividadesPage() {
       id_tipo: string | null; id_granja: string | null; descripcion: string | null;
       comentarios: string | null;
       tipos_actividad: { nombre: string } | null;
-      granjas: { nombre: string; direccion: string | null; poblacion: string | null } | null;
+      granjas: { nombre: string; direccion: string | null; poblacion: string | null; lat: number | null; lon: number | null } | null;
       actividades_empleados: {
         usuarios_perfil: { id: string; nombre: string; apellidos: string | null; color: string | null } | null;
       }[];
@@ -212,7 +229,7 @@ export default function ActividadesPage() {
       .select(`
         id, fecha, hora_inicio, hora_fin, id_tipo, id_granja, descripcion, comentarios,
         tipos_actividad(nombre),
-        granjas(nombre, direccion, poblacion),
+        granjas(nombre, direccion, poblacion, lat, lon),
         actividades_empleados(usuarios_perfil(id, nombre, apellidos, color))
       `)
       .gte("fecha", from).lte("fecha", to)
@@ -229,7 +246,7 @@ export default function ActividadesPage() {
       descripcion: row.descripcion,
       comentarios: row.comentarios,
       tipo: row.tipos_actividad,
-      granja: row.granjas,
+      granja: row.granjas ? { ...row.granjas } : null,
       empleados: (row.actividades_empleados ?? [])
         .map((ae: RawAct["actividades_empleados"][number]) => ae.usuarios_perfil)
         .filter((e): e is NonNullable<typeof e> => e !== null),
@@ -239,7 +256,7 @@ export default function ActividadesPage() {
   }, [supabase, view, currentDate]);
 
   useEffect(() => { loadActivities(); }, [loadActivities]);
-  useEffect(() => { setDistResult(null); }, [currentDate, filterEmpleado]);
+  useEffect(() => { setEmpRoutes([]); }, [currentDate]);
 
   // ── Filtered activities ───────────────────────────────────────────────────
   const filteredActivities = useMemo(() =>
@@ -365,62 +382,136 @@ export default function ActividadesPage() {
     setSaving(false);
   }
 
-  // ── Distance calculation (day view) ──────────────────────────────────────
-  async function calculateDayDistance() {
-    if (!filterEmpleado) return;
-    setCalcDist(true);
-    setDistResult(null);
+  // ── Route calculation per employee (day view) ────────────────────────────
+  async function calculateRouteForEmployee(
+    emp: { id: string; nombre: string; color: string | null },
+    dayActs: Activity[]
+  ) {
+    setEmpRoutes((prev) =>
+      prev.map((r) =>
+        r.empleadoId === emp.id ? { ...r, status: "loading" } : r
+      )
+    );
 
-    const { data: empData } = (await supabase
-      .from("usuarios_perfil" as never)
-      .select("direccion, nombre")
-      .eq("id", filterEmpleado)
-      .single()) as unknown as { data: { direccion: string | null; nombre: string } | null };
+    try {
+      const { data: empData } = (await supabase
+        .from("usuarios_perfil" as never)
+        .select("direccion")
+        .eq("id", emp.id)
+        .single()) as unknown as { data: { direccion: string | null } | null };
 
-    const empNombre = empData?.nombre ?? "Empleado";
-    const empDireccion = empData?.direccion?.trim();
+      const empDireccion = empData?.direccion?.trim() ?? null;
+      let homeCoord: { lat: number; lon: number } | null = null;
+      if (empDireccion) {
+        homeCoord = await geocodeNominatim(empDireccion);
+      }
 
-    const dayActs = filteredActivities
-      .filter((a) => a.fecha === dateStr(currentDate))
-      .sort((a, b) => (a.hora_inicio ?? "").localeCompare(b.hora_inicio ?? ""));
+      const empActs = dayActs
+        .filter((a) => a.empleados.some((e) => e.id === emp.id))
+        .sort((a, b) => (a.hora_inicio ?? "").localeCompare(b.hora_inicio ?? ""));
 
-    const stops: { label: string; addr: string }[] = [];
-    if (empDireccion) stops.push({ label: empNombre, addr: empDireccion });
+      const seenLatLon = new Set<string>();
+      const granjaWps: { lat: number; lon: number; label: string }[] = [];
 
-    const seenAddrs = new Set<string>();
+      for (const act of empActs) {
+        if (!act.granja) continue;
+        let coord: { lat: number; lon: number } | null = null;
+
+        if (act.granja.lat != null && act.granja.lon != null) {
+          coord = { lat: act.granja.lat, lon: act.granja.lon };
+        } else {
+          const addr = [act.granja.direccion, act.granja.poblacion].filter(Boolean).join(", ");
+          if (addr) coord = await geocodeNominatim(addr);
+        }
+
+        if (!coord) continue;
+        const key = `${coord.lat.toFixed(4)},${coord.lon.toFixed(4)}`;
+        if (seenLatLon.has(key)) continue;
+        seenLatLon.add(key);
+        granjaWps.push({ ...coord, label: act.granja.nombre });
+      }
+
+      if (!homeCoord && granjaWps.length === 0) {
+        setEmpRoutes((prev) =>
+          prev.map((r) =>
+            r.empleadoId === emp.id
+              ? { ...r, status: "error", error: "Sin coordenadas suficientes" }
+              : r
+          )
+        );
+        return;
+      }
+
+      const wpsForRoute: { lat: number; lon: number; label: string; isHome?: boolean }[] = [];
+      if (homeCoord) wpsForRoute.push({ ...homeCoord, label: emp.nombre, isHome: true });
+      wpsForRoute.push(...granjaWps);
+      if (homeCoord) wpsForRoute.push({ ...homeCoord, label: emp.nombre + " (vuelta)", isHome: true });
+
+      let osrmResult: { distanceM: number; geometry: { type: "LineString"; coordinates: [number, number][] } } | null = null;
+      if (wpsForRoute.length >= 2) {
+        osrmResult = await getOSRMRoute(wpsForRoute);
+      }
+
+      const totalKm = osrmResult ? osrmResult.distanceM / 1000 : 0;
+
+      setEmpRoutes((prev) =>
+        prev.map((r) =>
+          r.empleadoId === emp.id
+            ? {
+                ...r,
+                status: "done",
+                totalKm,
+                waypoints: wpsForRoute,
+                route: osrmResult
+                  ? { type: "LineString" as const, coordinates: osrmResult.geometry.coordinates }
+                  : null,
+              }
+            : r
+        )
+      );
+    } catch {
+      setEmpRoutes((prev) =>
+        prev.map((r) =>
+          r.empleadoId === emp.id
+            ? { ...r, status: "error", error: "Error calculando la ruta" }
+            : r
+        )
+      );
+    }
+  }
+
+  async function calculateAllRoutes() {
+    const dayStr = dateStr(currentDate);
+    const dayActs = filteredActivities.filter((a) => a.fecha === dayStr);
+
+    const empMap = new Map<string, { id: string; nombre: string; color: string | null }>();
     for (const act of dayActs) {
-      if (!act.granja) continue;
-      const addr = [act.granja.direccion, act.granja.poblacion].filter(Boolean).join(", ");
-      if (!addr || seenAddrs.has(addr)) continue;
-      seenAddrs.add(addr);
-      stops.push({ label: act.granja.nombre, addr });
-    }
-
-    if (stops.length < 2) {
-      setDistResult({ total: 0, legs: [], error: "No hay suficientes direcciones para calcular la ruta. Añade la dirección del empleado y asegúrate de que las granjas tienen dirección." });
-      setCalcDist(false);
-      return;
-    }
-
-    const coords: ({ lat: number; lon: number } | null)[] = [];
-    for (let i = 0; i < stops.length; i++) {
-      if (i > 0) await sleep(1100);
-      coords.push(await geocodeAddress(stops[i].addr));
-    }
-
-    const legs: DistLeg[] = [];
-    let total = 0;
-    for (let i = 0; i < stops.length - 1; i++) {
-      const a = coords[i]; const b = coords[i + 1];
-      if (a && b) {
-        const km = haversineKm(a, b);
-        legs.push({ from: stops[i].label, to: stops[i + 1].label, km });
-        total += km;
+      for (const e of act.empleados) {
+        if (!empMap.has(e.id)) empMap.set(e.id, { id: e.id, nombre: e.nombre, color: e.color });
       }
     }
+    const emps = Array.from(empMap.values());
+    if (emps.length === 0) return;
 
-    setDistResult({ total, legs });
-    setCalcDist(false);
+    setCalculatingAll(true);
+    setEmpRoutes(
+      emps.map((e) => ({
+        empleadoId: e.id,
+        empleadoNombre: e.nombre,
+        empleadoColor: e.color,
+        status: "idle",
+        totalKm: 0,
+        waypoints: [],
+        route: null,
+      }))
+    );
+
+    for (let i = 0; i < emps.length; i++) {
+      if (i > 0) await sleep(1100);
+      await calculateRouteForEmployee(emps[i], dayActs);
+    }
+
+    setCalculatingAll(false);
   }
 
   // ── Time grid helpers ────────────────────────────────────────────────────
@@ -531,70 +622,90 @@ export default function ActividadesPage() {
     const dayActs = activitiesForDate(currentDate);
     const isToday = dateStr(currentDate) === todayStr;
 
+    const dayStr = dateStr(currentDate);
+    const dayEmps = Array.from(
+      new Map(
+        filteredActivities
+          .filter((a) => a.fecha === dayStr)
+          .flatMap((a) => a.empleados)
+          .map((e) => [e.id, e])
+      ).values()
+    );
+
     return (
       <div>
-        {/* Distance panel — only when an employee filter is active */}
-        {filterEmpleado && (
-          <div className="mb-4 p-4 rounded-xl" style={{ border: "1px solid #e5e5e5" }}>
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <div className="text-sm font-medium text-gray-800">Distancia recorrida del día</div>
-                <div className="text-xs mt-0.5" style={{ color: "#888780" }}>
-                  Desde el domicilio del empleado hasta cada granja visitada, en orden cronológico
-                </div>
+        {/* Routes panel */}
+        <div className="mb-4 p-4 rounded-xl" style={{ border: "1px solid #e5e5e5" }}>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+            <div>
+              <div className="text-sm font-medium text-gray-800">Rutas del día por empleado</div>
+              <div className="text-xs mt-0.5" style={{ color: "#888780" }}>
+                Domicilio → granjas (ida y vuelta), calculado con OSRM
               </div>
-              <button
-                onClick={calculateDayDistance}
-                disabled={calcDist}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
-                style={{ backgroundColor: "var(--accent)" }}
-              >
-                {calcDist ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                    </svg>
-                    Calculando…
-                  </>
-                ) : "Calcular ruta"}
-              </button>
             </div>
-
-            {distResult && (
-              <div className="mt-3">
-                {distResult.error ? (
-                  <p className="text-sm" style={{ color: "#A32D2D" }}>{distResult.error}</p>
-                ) : (
-                  <>
-                    <div className="space-y-1.5 mb-2">
-                      {distResult.legs.map((leg, i) => (
-                        <div key={i} className="flex items-center gap-2 text-sm text-gray-600">
-                          <span className="text-gray-300 flex-shrink-0">→</span>
-                          <span className="truncate min-w-0">{leg.from}</span>
-                          <span className="text-gray-300 flex-shrink-0">→</span>
-                          <span className="truncate min-w-0">{leg.to}</span>
-                          <span className="ml-auto flex-shrink-0 font-medium text-gray-800 tabular-nums">
-                            {leg.km.toFixed(1)} km
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-700">Total estimado</span>
-                      <span className="text-base font-semibold" style={{ color: "var(--accent)" }}>
-                        {distResult.total.toFixed(1)} km
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs" style={{ color: "#888780" }}>
-                      * Distancia en línea recta (haversine). Puede diferir de la ruta real.
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
+            <button
+              onClick={calculateAllRoutes}
+              disabled={calculatingAll || dayEmps.length === 0}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
+              style={{ backgroundColor: "var(--accent)" }}
+            >
+              {calculatingAll ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Calculando…
+                </>
+              ) : "Calcular rutas del día"}
+            </button>
           </div>
-        )}
+
+          {empRoutes.length > 0 && (
+            <div className="space-y-2">
+              {empRoutes.map((r) => (
+                <div key={r.empleadoId} className="flex items-center gap-3 text-sm">
+                  <span
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: r.empleadoColor ?? "#6B7280" }}
+                  />
+                  <span className="flex-1 text-gray-700 truncate">{r.empleadoNombre}</span>
+                  {r.status === "loading" && (
+                    <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24" style={{ color: "#888780" }}>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  )}
+                  {r.status === "done" && (
+                    <>
+                      <span className="font-medium text-gray-800 tabular-nums flex-shrink-0">
+                        {r.totalKm.toFixed(1)} km
+                      </span>
+                      <button
+                        onClick={() => setRouteMapFor(r.empleadoId)}
+                        className="text-xs px-2 py-1 rounded-lg flex-shrink-0 font-medium"
+                        style={{ backgroundColor: "var(--accent)", color: "white" }}
+                      >
+                        Ver mapa
+                      </button>
+                    </>
+                  )}
+                  {r.status === "error" && (
+                    <span className="text-xs flex-shrink-0" style={{ color: "#A32D2D" }}>
+                      {r.error ?? "Error"}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {empRoutes.length === 0 && dayEmps.length === 0 && (
+            <p className="text-xs" style={{ color: "#888780" }}>
+              No hay actividades con empleados para este día.
+            </p>
+          )}
+        </div>
 
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #e5e5e5" }}>
           <div className="py-3 text-center text-sm font-medium"
@@ -932,23 +1043,33 @@ export default function ActividadesPage() {
                   <span className="text-sm text-gray-700 flex-1 text-center">{periodLabel()}</span>
                   <button onClick={() => navigate(1)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-600 text-xl">›</button>
                 </div>
-                {view === "day" && filterEmpleado && (
+                {view === "day" && (
                   <div className="mb-3 p-3 rounded-xl" style={{ border: "1px solid #e5e5e5" }}>
-                    <button onClick={calculateDayDistance} disabled={calcDist}
+                    <button
+                      onClick={calculateAllRoutes}
+                      disabled={calculatingAll}
                       className="w-full py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-                      style={{ backgroundColor: "var(--accent)" }}>
-                      {calcDist ? "Calculando…" : "Calcular distancia del día"}
+                      style={{ backgroundColor: "var(--accent)" }}
+                    >
+                      {calculatingAll ? "Calculando…" : "Calcular rutas del día"}
                     </button>
-                    {distResult && !distResult.error && (
-                      <div className="mt-2 text-center">
-                        <span className="text-base font-semibold" style={{ color: "var(--accent)" }}>
-                          {distResult.total.toFixed(1)} km
-                        </span>
-                        <span className="text-xs ml-1" style={{ color: "#888780" }}>estimados</span>
+                    {empRoutes.length > 0 && (
+                      <div className="mt-2 space-y-1.5">
+                        {empRoutes.map((r) => (
+                          <div key={r.empleadoId} className="flex items-center gap-2 text-xs">
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.empleadoColor ?? "#6B7280" }} />
+                            <span className="flex-1 truncate text-gray-700">{r.empleadoNombre}</span>
+                            {r.status === "done" && (
+                              <>
+                                <span className="font-medium tabular-nums" style={{ color: "var(--accent)" }}>{r.totalKm.toFixed(1)} km</span>
+                                <button onClick={() => setRouteMapFor(r.empleadoId)} className="text-blue-600 underline">mapa</button>
+                              </>
+                            )}
+                            {r.status === "loading" && <span style={{ color: "#888780" }}>…</span>}
+                            {r.status === "error" && <span style={{ color: "#A32D2D" }}>error</span>}
+                          </div>
+                        ))}
                       </div>
-                    )}
-                    {distResult?.error && (
-                      <p className="mt-2 text-xs text-center" style={{ color: "#A32D2D" }}>{distResult.error}</p>
                     )}
                   </div>
                 )}
@@ -1093,6 +1214,50 @@ export default function ActividadesPage() {
           </div>
         </div>
       )}
+
+      {/* Route map modal */}
+      {routeMapFor !== null && (() => {
+        const r = empRoutes.find((x) => x.empleadoId === routeMapFor);
+        if (!r) return null;
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
+            onClick={() => setRouteMapFor(null)}
+          >
+            <div
+              className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden"
+              style={{ border: "1px solid #e5e5e5" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between p-5 pb-3">
+                <div>
+                  <h2 className="font-semibold text-gray-900" style={{ fontSize: 15 }}>
+                    Ruta de {r.empleadoNombre}
+                  </h2>
+                  <p className="text-xs mt-0.5" style={{ color: "#888780" }}>
+                    {r.totalKm.toFixed(1)} km (estimado)
+                  </p>
+                </div>
+                <button
+                  onClick={() => setRouteMapFor(null)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors ml-4 flex-shrink-0"
+                  style={{ fontSize: 20, lineHeight: 1 }}
+                >
+                  ×
+                </button>
+              </div>
+              <div className="px-4 pb-5">
+                <LeafletMap
+                  waypoints={r.waypoints}
+                  route={r.route ?? undefined}
+                  height={400}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
