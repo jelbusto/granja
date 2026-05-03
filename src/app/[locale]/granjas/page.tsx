@@ -4,10 +4,11 @@ import { getGranjas } from "@/lib/supabase/granjas";
 import { PencilIcon, PlusIcon } from "@/components/ui/Icons";
 import { DeleteGranjaButton } from "@/components/granjas/DeleteGranjaButton";
 import GranjasMapa from "@/components/granjas/GranjasMapa";
+import { GranjasSearch } from "@/components/granjas/GranjasSearch";
 
 interface PageProps {
   params: { locale: string };
-  searchParams: { page?: string; vista?: string };
+  searchParams: { page?: string; vista?: string; q?: string };
 }
 
 export async function generateMetadata({ params }: PageProps) {
@@ -19,11 +20,12 @@ export default async function GranjasPage({ params, searchParams }: PageProps) {
   const { locale } = params;
   const page = Math.max(1, parseInt(searchParams.page ?? "1", 10));
   const vista = searchParams.vista === "mapa" ? "mapa" : "tabla";
+  const q = searchParams.q ?? "";
 
   const t = await getTranslations({ locale, namespace: "granjas" });
   const tc = await getTranslations({ locale, namespace: "common" });
 
-  const { data: granjas, count, pageSize, error } = await getGranjas(page);
+  const { data: granjas, count, pageSize, error } = await getGranjas(page, q);
   const totalPages = Math.ceil(count / pageSize);
 
   const paisLabels: Record<string, string> = {
@@ -85,6 +87,11 @@ export default async function GranjasPage({ params, searchParams }: PageProps) {
           </div>
         ) : (
           <>
+            {/* Search */}
+            <div className="mb-4 max-w-sm">
+              <GranjasSearch defaultValue={q} />
+            </div>
+
             {/* Table */}
             <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
               <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -95,6 +102,9 @@ export default async function GranjasPage({ params, searchParams }: PageProps) {
                     </th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-600">
                       {t("nombre")}
+                    </th>
+                    <th className="hidden sm:table-cell px-4 py-3 text-left font-semibold text-gray-600">
+                      {t("poblacion")}
                     </th>
                     <th className="hidden sm:table-cell px-4 py-3 text-left font-semibold text-gray-600">
                       {t("pais")}
@@ -111,10 +121,10 @@ export default async function GranjasPage({ params, searchParams }: PageProps) {
                   {granjas.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         className="px-4 py-10 text-center text-gray-400"
                       >
-                        {t("no_granjas")}
+                        {q ? `Sin resultados para "${q}"` : t("no_granjas")}
                       </td>
                     </tr>
                   ) : (
@@ -125,6 +135,9 @@ export default async function GranjasPage({ params, searchParams }: PageProps) {
                         </td>
                         <td className="px-4 py-3 font-medium text-gray-900">
                           {g.nombre}
+                        </td>
+                        <td className="hidden sm:table-cell px-4 py-3 text-gray-600">
+                          {g.poblacion ?? "—"}
                         </td>
                         <td className="hidden sm:table-cell px-4 py-3 text-gray-600">
                           {g.pais ? (paisLabels[g.pais] ?? g.pais) : "—"}
@@ -168,7 +181,7 @@ export default async function GranjasPage({ params, searchParams }: PageProps) {
                 <div className="flex gap-2">
                   {page > 1 && (
                     <Link
-                      href={`/granjas?page=${page - 1}`}
+                      href={`/granjas?page=${page - 1}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
                       className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
                     >
                       ← {tc("previous")}
@@ -176,7 +189,7 @@ export default async function GranjasPage({ params, searchParams }: PageProps) {
                   )}
                   {page < totalPages && (
                     <Link
-                      href={`/granjas?page=${page + 1}`}
+                      href={`/granjas?page=${page + 1}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
                       className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
                     >
                       {tc("next")} →

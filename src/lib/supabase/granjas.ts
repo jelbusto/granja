@@ -22,7 +22,7 @@ async function geocodeAddress(
 
 export type GranjaListRow = Pick<
   Tables<"granjas">,
-  "id" | "codigo" | "nombre" | "pais" | "activo"
+  "id" | "codigo" | "nombre" | "poblacion" | "pais" | "activo"
 >;
 
 export type GranjaWithSala = Tables<"granjas"> & {
@@ -75,7 +75,7 @@ export type ActionResult = {
 
 const PAGE_SIZE = 10;
 
-export async function getGranjas(page = 1): Promise<{
+export async function getGranjas(page = 1, q = ""): Promise<{
   data: GranjaListRow[];
   count: number;
   pageSize: number;
@@ -85,11 +85,17 @@ export async function getGranjas(page = 1): Promise<{
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  const { data, error, count } = await supabase
+  let query = supabase
     .from("granjas")
-    .select("id, codigo, nombre, pais, activo", { count: "exact" })
+    .select("id, codigo, nombre, poblacion, pais, activo", { count: "exact" })
     .order("nombre")
     .range(from, to);
+
+  if (q.trim()) {
+    query = query.or(`nombre.ilike.%${q.trim()}%,poblacion.ilike.%${q.trim()}%`);
+  }
+
+  const { data, error, count } = await query;
 
   return {
     data: data ?? [],
