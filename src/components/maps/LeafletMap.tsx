@@ -1,3 +1,5 @@
+"use client";
+
 import dynamic from "next/dynamic";
 
 // Types redeclared here so this file never imports from LeafletMapInner
