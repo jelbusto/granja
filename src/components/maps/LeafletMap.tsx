@@ -1,5 +1,20 @@
 import dynamic from "next/dynamic";
-import type { LeafletMapProps } from "./LeafletMapInner";
+
+// Types redeclared here so this file never imports from LeafletMapInner
+// (which pulls in leaflet CSS and would break SSR resolution)
+export type Waypoint = {
+  lat: number;
+  lon: number;
+  label: string;
+  isHome?: boolean;
+};
+
+export interface LeafletMapProps {
+  waypoints: Waypoint[];
+  route?: { type: "LineString"; coordinates: [number, number][] };
+  height?: number;
+  fitBounds?: boolean;
+}
 
 const LeafletMap = dynamic(() => import("./LeafletMapInner"), {
   ssr: false,
@@ -13,5 +28,4 @@ const LeafletMap = dynamic(() => import("./LeafletMapInner"), {
   ),
 });
 
-export type { LeafletMapProps };
 export default LeafletMap;

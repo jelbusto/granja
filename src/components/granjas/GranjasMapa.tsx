@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import LeafletMap from "@/components/maps/LeafletMap";
-import type { Waypoint } from "@/components/maps/LeafletMapInner";
+import LeafletMap, { type Waypoint } from "@/components/maps/LeafletMap";
 
 type GranjaGeo = {
   id: string;

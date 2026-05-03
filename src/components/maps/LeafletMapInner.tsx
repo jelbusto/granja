@@ -26,14 +26,14 @@ function makeCircleIcon(color: string) {
 const homeIcon = makeCircleIcon("#3B82F6");
 const granjaIcon = makeCircleIcon("#22C55E");
 
-export type Waypoint = {
+type Waypoint = {
   lat: number;
   lon: number;
   label: string;
   isHome?: boolean;
 };
 
-export interface LeafletMapProps {
+interface LeafletMapProps {
   waypoints: Waypoint[];
   route?: { type: "LineString"; coordinates: [number, number][] };
   height?: number;
