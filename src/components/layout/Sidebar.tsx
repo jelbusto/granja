@@ -26,7 +26,9 @@ import {
   ClockIcon,
   CalendarIcon,
   TagIcon,
+  BellIcon,
 } from "@/components/ui/Icons";
+import { BellNotification } from "./BellNotification";
 
 type IconComponent = (props: SVGProps<SVGSVGElement>) => JSX.Element;
 
@@ -137,6 +139,7 @@ export function Sidebar() {
     { kind: "link", href: "/carga-datos",   ruta: "carga_datos",    label: t("carga_datos"),       icon: ArrowUpTrayIcon },
     { kind: "link", href: "/documentacion", ruta: "documentacion",  label: t("documentacion"),     icon: DocumentIcon },
     { kind: "link", href: "/actividades",   ruta: "actividades",    label: t("actividades"),       icon: CalendarIcon },
+    { kind: "link", href: "/tareas",        ruta: "tareas",         label: t("tareas"),             icon: BellIcon },
     {
       kind: "group",
       key: "empleados",
@@ -258,7 +261,10 @@ export function Sidebar() {
     <>
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex lg:flex-col w-64 flex-shrink-0 bg-gray-900 min-h-screen border-r border-gray-700">
-        <div className="px-4 py-5 border-b border-gray-700"><SidebarLogo /></div>
+        <div className="px-4 py-5 border-b border-gray-700 flex items-center justify-between gap-2">
+          <SidebarLogo />
+          <BellNotification />
+        </div>
         <UserHeader />
         <nav className="flex-1 overflow-y-auto">
           <NavList onClose={() => {}} />
@@ -270,7 +276,8 @@ export function Sidebar() {
         <button onClick={() => setMobileOpen(true)} className="text-gray-300 hover:text-white p-1 rounded" aria-label="Abrir menú">
           <Bars3Icon className="h-6 w-6" />
         </button>
-        <div className="ml-3"><SidebarLogo /></div>
+        <div className="ml-3 flex-1"><SidebarLogo /></div>
+        <BellNotification />
       </div>
 
       {/* Mobile backdrop */}
