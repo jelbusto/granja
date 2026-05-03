@@ -65,9 +65,9 @@ export default async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Excluir archivos estáticos y rutas internas de Next.js.
+     * Excluir archivos estáticos, rutas internas de Next.js y archivos PWA.
      * Incluir todo lo demás (páginas, API routes, etc.)
      */
-    "/((?!_next/static|_next/image|favicon.ico|sw.js|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|api/|.*\\.(?:svg|png|jpg|jpeg|gif|ico|webp|webmanifest)$).*)",
   ],
 };
