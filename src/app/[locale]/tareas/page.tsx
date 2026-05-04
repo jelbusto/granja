@@ -27,26 +27,33 @@ export default function TareasPage() {
   const [isAdmin,   setIsAdmin]   = useState(false);
   const [loading,   setLoading]   = useState(true);
 
-  // Form state
   const [desc,       setDesc]       = useState("");
   const [asignadoA,  setAsignadoA]  = useState("");
   const [granjaId,   setGranjaId]   = useState("");
   const [saving,     setSaving]     = useState(false);
+  const [formError,  setFormError]  = useState("");
 
-  // Filter state
   const [filtroEstado,  setFiltroEstado]  = useState<"todas" | "pendiente" | "resuelta">("todas");
   const [filtroEmp,     setFiltroEmp]     = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  // Initialize uid + asignadoA once on mount, independently of load()
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.id) {
+        setUid(user.id);
+        setAsignadoA(user.id);
+      }
+    });
+  }, [supabase]);
 
   const load = useCallback(async () => {
     setLoading(true);
 
     const { data: { user } } = await supabase.auth.getUser();
     const currentUid = user?.id ?? "";
-    setUid(currentUid);
-    if (asignadoA === "" && currentUid) setAsignadoA(currentUid);
 
-    // Determine admin status: has any edit permission → is admin
+    // Admin: has any edit permission in the system
     let admin = false;
     if (currentUid) {
       const { data: perfil } = await (supabase
@@ -87,7 +94,6 @@ export default function TareasPage() {
     setEmpleados(e ?? []);
     setGranjas(g ?? []);
     setLoading(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
   useEffect(() => { load(); }, [load]);
@@ -95,14 +101,23 @@ export default function TareasPage() {
   async function handleAdd() {
     if (!desc.trim() || !asignadoA) return;
     setSaving(true);
-    await (supabase
+    setFormError("");
+
+    const { error } = await (supabase
       .from("tareas" as never)
       .insert({
         descripcion: desc.trim(),
         id_empleado: asignadoA,
         id_granja:   granjaId || null,
         created_by:  uid || null,
-      } as never));
+      } as never)) as { error: { message: string } | null };
+
+    if (error) {
+      setFormError(error.message);
+      setSaving(false);
+      return;
+    }
+
     setDesc(""); setGranjaId("");
     setSaving(false);
     load();
@@ -135,7 +150,6 @@ export default function TareasPage() {
     return true;
   });
 
-  // Bell badge only counts tasks assigned to current user
   const nPropias = tareas.filter(t => t.estado === "pendiente" && t.id_empleado === uid).length;
 
   return (
@@ -169,7 +183,6 @@ export default function TareasPage() {
             className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
           <div className="flex flex-col sm:flex-row gap-2">
-            {/* Empleado (obligatorio) */}
             <select
               value={asignadoA}
               onChange={(e) => setAsignadoA(e.target.value)}
@@ -183,7 +196,6 @@ export default function TareasPage() {
                 </option>
               ))}
             </select>
-            {/* Granja (opcional) */}
             <select
               value={granjaId}
               onChange={(e) => setGranjaId(e.target.value)}
@@ -204,6 +216,9 @@ export default function TareasPage() {
               Añadir
             </button>
           </div>
+          {formError && (
+            <p className="text-xs text-red-600 mt-1">{formError}</p>
+          )}
         </div>
       </div>
 
@@ -225,8 +240,6 @@ export default function TareasPage() {
             </button>
           ))}
         </div>
-
-        {/* Filtro por empleado: solo admin */}
         {isAdmin && (
           <select
             value={filtroEmp}
@@ -248,22 +261,19 @@ export default function TareasPage() {
         <p className="text-center py-12 text-sm" style={{ color: "#888780" }}>Cargando…</p>
       ) : visible.length === 0 ? (
         <p className="text-center py-12 text-sm" style={{ color: "#888780" }}>
-          No hay tareas
-          {filtroEstado !== "todas" ? ` ${filtroEstado === "pendiente" ? "pendientes" : "resueltas"}` : ""}
+          No hay tareas{filtroEstado !== "todas" ? ` ${filtroEstado === "pendiente" ? "pendientes" : "resueltas"}` : ""}
         </p>
       ) : (
         <ul className="space-y-2">
           {visible.map((tarea) => {
-            const resuelta = tarea.estado === "resuelta";
-            const esParaMi = tarea.id_empleado === uid;
-
+            const resuelta  = tarea.estado === "resuelta";
+            const esParaMi  = tarea.id_empleado === uid;
             return (
               <li
                 key={tarea.id}
                 className="flex items-start gap-3 p-3 rounded-xl"
                 style={{ border: "1px solid #e5e5e5", backgroundColor: resuelta ? "#fafafa" : "white" }}
               >
-                {/* Toggle estado */}
                 <button
                   onClick={() => toggleEstado(tarea)}
                   title={resuelta ? "Marcar pendiente" : "Marcar resuelta"}
@@ -273,7 +283,6 @@ export default function TareasPage() {
                   <CheckCircleIcon className="h-5 w-5" />
                 </button>
 
-                {/* Contenido */}
                 <div className="flex-1 min-w-0">
                   <p
                     className="text-sm leading-snug"
@@ -285,7 +294,6 @@ export default function TareasPage() {
                     {tarea.descripcion}
                   </p>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    {/* Empleado asignado */}
                     <span
                       className="text-xs px-2 py-0.5 rounded-full"
                       style={
@@ -296,27 +304,22 @@ export default function TareasPage() {
                     >
                       {esParaMi ? "Para mí" : empNombre(tarea.id_empleado)}
                     </span>
-                    {/* Granja */}
                     {tarea.granjas && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
                         {tarea.granjas.nombre}
                       </span>
                     )}
-                    {/* Asignado por (si es diferente al destinatario) */}
                     {tarea.created_by && tarea.created_by !== tarea.id_empleado && (
                       <span className="text-xs" style={{ color: "#C0BDB9" }}>
                         de {empNombre(tarea.created_by)}
                       </span>
                     )}
                     <span className="text-xs" style={{ color: "#C0BDB9" }}>
-                      {new Date(tarea.created_at).toLocaleDateString("es-ES", {
-                        day: "numeric", month: "short",
-                      })}
+                      {new Date(tarea.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
                     </span>
                   </div>
                 </div>
 
-                {/* Estado badge */}
                 <span
                   className="flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium"
                   style={
@@ -328,7 +331,6 @@ export default function TareasPage() {
                   {resuelta ? "Resuelta" : "Pendiente"}
                 </span>
 
-                {/* Eliminar */}
                 {deleteConfirm === tarea.id ? (
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button onClick={() => handleDelete(tarea.id)} className="text-xs text-red-600 font-medium hover:underline">Sí</button>
